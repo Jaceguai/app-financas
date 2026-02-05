@@ -22,7 +22,6 @@ export default function DashboardScreen() {
     getRendaTotal,
     hideValues,
     setHideValues,
-    // Getters
     getGastosFixosDebit,
     getGastosVariaveisDebit,
     getInvoiceTotal,
@@ -34,25 +33,15 @@ export default function DashboardScreen() {
 
   const { refetch, isLoading } = useSyncDrive();
   
-  // --- Valores ---
   const rendaTotal = getRendaTotal?.() || 0;
-  
-  // Débito (Saiu da conta agora)
   const gastosFixosDebit = getGastosFixosDebit();
   const gastosMesDebit = getGastosVariaveisDebit();
-  
-  // Crédito (Vai sair na fatura)
   const invoiceTotal = getInvoiceTotal();
   const invoiceFixed = getInvoiceFixed();
   const invoiceVariable = getInvoiceVariable();
-
-  // --- O CÁLCULO REAL (Sobras) ---
-  // O dinheiro que sobra é: O que você ganha MENOS o que saiu no débito MENOS o que já gastou no crédito
   const restante = rendaTotal - gastosFixosDebit - gastosMesDebit - invoiceTotal;
 
   const patrimonioTotal = (poupancas || []).reduce((sum, p) => sum + (Number(p.atual) || 0), 0);
-  
-  // Gráficos de Consumo
   const transacoesMes = getTransactionsByMonth();
   const gastosUsuarioA = transacoesMes
     .filter((t) => t.userName === 'Usuário A')
@@ -61,7 +50,6 @@ export default function DashboardScreen() {
     .filter((t) => t.userName === 'Usuário B')
     .reduce((sum, t) => sum + (Number(t.value) || 0), 0);
 
-  // Navegação
   const [mes, ano] = (selectedMonth || '01/2026').split('/');
   const mesIndex = parseInt(mes, 10) - 1;
   const mesNome = MESES[mesIndex] || 'Janeiro';
@@ -104,7 +92,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Card 1: Visão Geral do Orçamento */}
         <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Balanço Mensal</Text>
         
@@ -118,7 +105,6 @@ export default function DashboardScreen() {
             <Text style={styles.valueRed}>- {formatCurrency(gastosFixosDebit + gastosMesDebit, localHideValues)}</Text>
           </View>
 
-          {/* NOVA LINHA: Mostra que a fatura também subtrai do saldo */}
           <View style={styles.row}>
             <Text style={styles.labelOrange}>Comprometido (Fatura):</Text>
             <Text style={styles.valueOrange}>- {formatCurrency(invoiceTotal, localHideValues)}</Text>
@@ -132,7 +118,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Card 2: Detalhe da Fatura */}
         <View style={[styles.card, styles.invoiceCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.invoiceHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

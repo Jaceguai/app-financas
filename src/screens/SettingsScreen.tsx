@@ -5,12 +5,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useTheme } from '../theme';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { sendFixedExpense, addSavingsGoal, sendRenda, updateSharedConfig, depositToMeta, deleteFixo, deleteMeta, deleteRenda, fetchDriveData } from '../services/api';
 import { Poupanca, RendaFixa } from '../types';
 import { Toast } from '../components/Toast';
-import { formatCurrency, formatCurrencyInput, parseCurrency as parseCurrencyUtil } from '../utils/formatters'; 
+import { formatCurrency, formatCurrencyInput, parseCurrency as parseCurrencyUtil } from '../utils/formatters';
+import { 
+  rendaSchema, RendaFormData,
+  fixedExpenseSchema, FixedExpenseFormData,
+  metaSchema, MetaFormData,
+  depositoMetaSchema, DepositoMetaFormData,
+  configSchema, ConfigFormData
+} from '../schemas'; 
 
 export const SettingsScreen: React.FC = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -33,25 +42,33 @@ export const SettingsScreen: React.FC = () => {
   const [hideRendaValues, setHideRendaValues] = useState(false);
   const [hideFixosValues, setHideFixosValues] = useState(false);
   const [hideMetasValues, setHideMetasValues] = useState(false);
-  
-  const [rendaDesc, setRendaDesc] = useState('');
-  const [rendaValor, setRendaValor] = useState('');
-  const [rendaResponsavel, setRendaResponsavel] = useState<'A' | 'B' | 'Ambos'>('Ambos');
-  const [rendaPaymentMethod, setRendaPaymentMethod] = useState<'debit' | 'credit'>('debit');
-
-  const [salarioDesc, setSalarioDesc] = useState('');
-  const [salarioValor, setSalarioValor] = useState('');
-  const [salarioResponsavel, setSalarioResponsavel] = useState<'A' | 'B' | 'Ambos'>('A');
-
-  const [poupNome, setPoupNome] = useState('');
-  const [poupObjetivo, setPoupObjetivo] = useState('');
-  const [poupAtual, setPoupAtual] = useState('');
-
-  const [extraValor, setExtraValor] = useState(String(extraGastosVariaveis || 1000));
-  
   const [depositModal, setDepositModal] = useState(false);
   const [depositId, setDepositId] = useState('');
-  const [depositValor, setDepositValor] = useState('');
+
+  const rendaForm = useForm<RendaFormData>({
+    resolver: zodResolver(rendaSchema),
+    defaultValues: { descricao: '', valor: '', responsavel: 'A' }
+  });
+
+  const fixedForm = useForm<FixedExpenseFormData>({
+    resolver: zodResolver(fixedExpenseSchema),
+    defaultValues: { descricao: '', valor: '', responsavel: 'Ambos', paymentMethod: 'debit' }
+  });
+
+  const metaForm = useForm<MetaFormData>({
+    resolver: zodResolver(metaSchema),
+    defaultValues: { nome: '', objetivo: '', atual: '' }
+  });
+
+  const depositForm = useForm<DepositoMetaFormData>({
+    resolver: zodResolver(depositoMetaSchema),
+    defaultValues: { valor: '' }
+  });
+
+  const configForm = useForm<ConfigFormData>({
+    resolver: zodResolver(configSchema),
+    defaultValues: { extraGastosVariaveis: String(extraGastosVariaveis || 1000) }
+  });
 
   const responsavelLabel: Record<string, string> = { A: 'Eu', B: 'Esposa', Ambos: 'Ambos' };
 
@@ -73,90 +90,75 @@ export const SettingsScreen: React.FC = () => {
     }
   };
 
-  const validatePayload = (desc: string, val: string) => {
-    if (!desc.trim()) return { valid: false, msg: 'A descrição é obrigatória.' };
-    const num = parseCurrencyUtil(val);
-    if (isNaN(num) || num <= 0) return { valid: false, msg: 'Insira um valor válido.' };
-    return { valid: true, value: num };
-  };
-
-  // --- Handlers ---
-
-  const handleAddSalario = async () => {
-    const check = validatePayload(salarioDesc, salarioValor);
-    if (!check.valid) return showToast(check.msg!, 'error');
+  const handleAddSalario = rendaForm.handleSubmit(async (data) => {
     setLoadingAction('salary');
     Keyboard.dismiss();
     try {
-      const novaRenda = { id: Date.now().toString(), descricao: salarioDesc.trim(), valor: check.value!, responsavel: salarioResponsavel };
+      const valor = parseCurrencyUtil(data.valor);
+      const novaRenda = { id: Date.now().toString(), descricao: data.descricao.trim(), valor, responsavel: data.responsavel };
       await sendRenda(novaRenda);
       addRenda(novaRenda);
-      setSalarioDesc(''); setSalarioValor('');
+      rendaForm.reset();
       showToast('Renda salva!', 'success');
     } catch (e) { showToast('Erro ao salvar.', 'error'); } 
     finally { setLoadingAction(null); }
-  };
+  });
 
-  const handleAddFixo = async () => {
-    const check = validatePayload(rendaDesc, rendaValor);
-    if (!check.valid) return showToast(check.msg!, 'error');
+  const handleAddFixo = fixedForm.handleSubmit(async (data) => {
     setLoadingAction('fixed');
     Keyboard.dismiss();
     try {
-      const novoFixo: RendaFixa = { id: Date.now().toString(), descricao: rendaDesc.trim(), valor: check.value!, responsavel: rendaResponsavel, paymentMethod: rendaPaymentMethod };
+      const valor = parseCurrencyUtil(data.valor);
+      const novoFixo: RendaFixa = { id: Date.now().toString(), descricao: data.descricao.trim(), valor, responsavel: data.responsavel, paymentMethod: data.paymentMethod };
       await sendFixedExpense(novoFixo as any);
       addRendaFixa(novoFixo);
-      setRendaDesc(''); setRendaValor(''); setRendaPaymentMethod('debit');
+      fixedForm.reset();
       showToast('Gasto fixo salvo!', 'success');
     } catch (e) { showToast('Erro ao salvar.', 'error'); } 
     finally { setLoadingAction(null); }
-  };
+  });
 
-  const handleAddMeta = async () => {
-    if (!poupNome.trim()) return showToast('Nome obrigatório', 'error');
-    const objNum = parseCurrencyUtil(poupObjetivo);
-    const atuNum = parseCurrencyUtil(poupAtual);
-    if (isNaN(objNum) || objNum <= 0) return showToast('Objetivo inválido', 'error');
+  const handleAddMeta = metaForm.handleSubmit(async (data) => {
     setLoadingAction('meta');
     Keyboard.dismiss();
     try {
-      const novaMeta: Poupanca = { id: Date.now().toString(), nome: poupNome.trim(), objetivo: objNum, atual: isNaN(atuNum) ? 0 : atuNum };
+      const objetivo = parseCurrencyUtil(data.objetivo);
+      const atual = data.atual && data.atual.trim() !== '' ? parseCurrencyUtil(data.atual) : 0;
+      const novaMeta: Poupanca = { id: Date.now().toString(), nome: data.nome.trim(), objetivo, atual };
       await addSavingsGoal(novaMeta);
       addPoupanca(novaMeta);
-      setPoupNome(''); setPoupObjetivo(''); setPoupAtual('');
+      metaForm.reset();
       showToast('Meta criada!', 'success');
     } catch (e) { showToast('Erro ao criar meta.', 'error'); } 
     finally { setLoadingAction(null); }
-  };
+  });
 
-  const handleSaveConfig = async () => {
-    const num = parseCurrencyUtil(extraValor);
-    if (isNaN(num) || num < 0) return showToast('Valor inválido', 'error');
+  const handleSaveConfig = configForm.handleSubmit(async (data) => {
     setLoadingAction('config');
     Keyboard.dismiss();
     try {
+      const num = parseCurrencyUtil(data.extraGastosVariaveis);
       await updateSharedConfig('extraGastosVariaveis', num);
       setExtraGastosVariaveis(num);
       showToast('Limite atualizado!', 'success');
     } catch (e) { showToast('Erro ao atualizar.', 'error'); } 
     finally { setLoadingAction(null); }
-  };
+  });
 
-  const handleDeposit = async () => {
-    const val = parseCurrencyUtil(depositValor);
-    if (isNaN(val) || val <= 0) return showToast('Valor inválido', 'error');
+  const handleDeposit = depositForm.handleSubmit(async (data) => {
     const meta = poupancas.find(p => p.id === depositId);
     if (!meta) return;
     setLoadingAction('deposit');
     try {
+      const val = parseCurrencyUtil(data.valor);
       await depositToMeta(meta.nome, val);
       updatePoupanca(depositId, (Number(meta.atual) || 0) + val);
       showToast(`Depósito realizado!`, 'success');
       setDepositModal(false);
-      setDepositValor('');
+      depositForm.reset();
     } catch (e) { showToast('Falha no depósito.', 'error'); } 
     finally { setLoadingAction(null); }
-  };
+  });
 
   const handleDeleteItem = (id: string, nome: string, apiDelete: (nome: string) => Promise<void>, storeRemove: (id: string) => void) => {
     Alert.alert('Remover', `Excluir "${nome}"?`, [
@@ -182,15 +184,24 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Depositar na Meta</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Valor (R$)" 
-              placeholderTextColor={theme.colors.inputPlaceholder}
-              keyboardType="numeric" 
-              value={depositValor} 
-              onChangeText={(text) => setDepositValor(formatCurrencyInput(text))} 
-              autoFocus
+            <Controller
+              control={depositForm.control}
+              name="valor"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, depositForm.formState.errors.valor && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Valor (R$)" 
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  keyboardType="numeric" 
+                  value={value} 
+                  onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                  autoFocus
+                />
+              )}
             />
+            {depositForm.formState.errors.valor && (
+              <Text style={styles.errorText}>{depositForm.formState.errors.valor.message}</Text>
+            )}
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.btnCancel} onPress={() => setDepositModal(false)}>
                 <Text style={styles.btnCancelText}>Cancelar</Text>
@@ -215,8 +226,6 @@ export const SettingsScreen: React.FC = () => {
           />
         }
       >
-        
-        {/* TEMA */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Aparência</Text>
           <Text style={styles.label}>Tema do Aplicativo</Text>
@@ -247,7 +256,6 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* SALÁRIOS */}
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={styles.sectionTitle}>Rendas Mensais</Text>
@@ -261,22 +269,55 @@ export const SettingsScreen: React.FC = () => {
           </View>
           <Text style={[styles.totalText, { color: theme.colors.secondary }]}>Total Atual: {formatCurrency(rendaTotal, hideRendaValues)}</Text>
           <View style={styles.formGroup}>
-            <TextInput style={styles.input} placeholder="Descrição" placeholderTextColor={theme.colors.inputPlaceholder} value={salarioDesc} onChangeText={setSalarioDesc} />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Valor (R$)" 
-              placeholderTextColor={theme.colors.inputPlaceholder} 
-              keyboardType="numeric" 
-              value={salarioValor} 
-              onChangeText={(text) => setSalarioValor(formatCurrencyInput(text))} 
+            <Controller
+              control={rendaForm.control}
+              name="descricao"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, rendaForm.formState.errors.descricao && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Descrição" 
+                  placeholderTextColor={theme.colors.inputPlaceholder} 
+                  value={value} 
+                  onChangeText={onChange} 
+                />
+              )}
             />
-            <View style={styles.btnRow}>
-              {(['A', 'B', 'Ambos'] as const).map((r) => (
-                <TouchableOpacity key={r} style={[styles.btnResp, salarioResponsavel === r && styles.btnRespActive]} onPress={() => setSalarioResponsavel(r)}>
-                  <Text style={salarioResponsavel === r ? styles.btnRespTextActive : styles.btnRespText}>{responsavelLabel[r]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {rendaForm.formState.errors.descricao && (
+              <Text style={styles.errorText}>{rendaForm.formState.errors.descricao.message}</Text>
+            )}
+
+            <Controller
+              control={rendaForm.control}
+              name="valor"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, rendaForm.formState.errors.valor && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Valor (R$)" 
+                  placeholderTextColor={theme.colors.inputPlaceholder} 
+                  keyboardType="numeric" 
+                  value={value} 
+                  onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                />
+              )}
+            />
+            {rendaForm.formState.errors.valor && (
+              <Text style={styles.errorText}>{rendaForm.formState.errors.valor.message}</Text>
+            )}
+
+            <Controller
+              control={rendaForm.control}
+              name="responsavel"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.btnRow}>
+                  {(['A', 'B', 'Ambos'] as const).map((r) => (
+                    <TouchableOpacity key={r} style={[styles.btnResp, value === r && styles.btnRespActive]} onPress={() => onChange(r)}>
+                      <Text style={value === r ? styles.btnRespTextActive : styles.btnRespText}>{responsavelLabel[r]}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            />
+
             <TouchableOpacity style={styles.btnAdd} onPress={handleAddSalario} disabled={loadingAction === 'salary'}>
               {loadingAction === 'salary' ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnAddText}>+ Adicionar Renda</Text>}
             </TouchableOpacity>
@@ -298,7 +339,6 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* GASTOS FIXOS */}
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={styles.sectionTitle}>Gastos Fixos</Text>
@@ -312,32 +352,71 @@ export const SettingsScreen: React.FC = () => {
           </View>
           <Text style={styles.totalTextRed}>Total Comprometido: {formatCurrency(totalFixos, hideFixosValues)}</Text>
           <View style={styles.formGroup}>
-            <TextInput style={styles.input} placeholder="Descrição" placeholderTextColor={theme.colors.inputPlaceholder} value={rendaDesc} onChangeText={setRendaDesc} />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Valor (R$)" 
-              placeholderTextColor={theme.colors.inputPlaceholder} 
-              keyboardType="numeric" 
-              value={rendaValor} 
-              onChangeText={(text) => setRendaValor(formatCurrencyInput(text))} 
+            <Controller
+              control={fixedForm.control}
+              name="descricao"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, fixedForm.formState.errors.descricao && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Descrição" 
+                  placeholderTextColor={theme.colors.inputPlaceholder} 
+                  value={value} 
+                  onChangeText={onChange} 
+                />
+              )}
             />
+            {fixedForm.formState.errors.descricao && (
+              <Text style={styles.errorText}>{fixedForm.formState.errors.descricao.message}</Text>
+            )}
+
+            <Controller
+              control={fixedForm.control}
+              name="valor"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, fixedForm.formState.errors.valor && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Valor (R$)" 
+                  placeholderTextColor={theme.colors.inputPlaceholder} 
+                  keyboardType="numeric" 
+                  value={value} 
+                  onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                />
+              )}
+            />
+            {fixedForm.formState.errors.valor && (
+              <Text style={styles.errorText}>{fixedForm.formState.errors.valor.message}</Text>
+            )}
             
             <Text style={styles.label}>Quem paga? / Método</Text>
-            <View style={styles.btnRow}>
-              {(['A', 'B', 'Ambos'] as const).map((r) => (
-                <TouchableOpacity key={r} style={[styles.btnResp, rendaResponsavel === r && styles.btnRespActive]} onPress={() => setRendaResponsavel(r)}>
-                  <Text style={rendaResponsavel === r ? styles.btnRespTextActive : styles.btnRespText}>{responsavelLabel[r]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={[styles.btnResp, rendaPaymentMethod === 'debit' && styles.btnRespActive]} onPress={() => setRendaPaymentMethod('debit')}>
-                <Text style={rendaPaymentMethod === 'debit' ? styles.btnRespTextActive : styles.btnRespText}>Débito</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btnResp, rendaPaymentMethod === 'credit' && styles.btnRespCreditActive]} onPress={() => setRendaPaymentMethod('credit')}>
-                <Text style={rendaPaymentMethod === 'credit' ? styles.btnRespTextActive : styles.btnRespText}>Crédito</Text>
-              </TouchableOpacity>
-            </View>
+            <Controller
+              control={fixedForm.control}
+              name="responsavel"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.btnRow}>
+                  {(['A', 'B', 'Ambos'] as const).map((r) => (
+                    <TouchableOpacity key={r} style={[styles.btnResp, value === r && styles.btnRespActive]} onPress={() => onChange(r)}>
+                      <Text style={value === r ? styles.btnRespTextActive : styles.btnRespText}>{responsavelLabel[r]}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            />
+
+            <Controller
+              control={fixedForm.control}
+              name="paymentMethod"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.btnRow}>
+                  <TouchableOpacity style={[styles.btnResp, value === 'debit' && styles.btnRespActive]} onPress={() => onChange('debit')}>
+                    <Text style={value === 'debit' ? styles.btnRespTextActive : styles.btnRespText}>Débito</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.btnResp, value === 'credit' && styles.btnRespCreditActive]} onPress={() => onChange('credit')}>
+                    <Text style={value === 'credit' ? styles.btnRespTextActive : styles.btnRespText}>Crédito</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+
             <TouchableOpacity style={styles.btnAdd} onPress={handleAddFixo} disabled={loadingAction === 'fixed'}>
               {loadingAction === 'fixed' ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnAddText}>+ Adicionar Fixo</Text>}
             </TouchableOpacity>
@@ -364,7 +443,6 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* METAS */}
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={styles.sectionTitle}>Metas de Poupança</Text>
@@ -377,25 +455,59 @@ export const SettingsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.formGroup}>
-            <TextInput style={styles.input} placeholder="Nome da meta" placeholderTextColor={theme.colors.inputPlaceholder} value={poupNome} onChangeText={setPoupNome} />
+            <Controller
+              control={metaForm.control}
+              name="nome"
+              render={({ field: { onChange, value } }) => (
+                <TextInput 
+                  style={[styles.input, metaForm.formState.errors.nome && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                  placeholder="Nome da meta" 
+                  placeholderTextColor={theme.colors.inputPlaceholder} 
+                  value={value} 
+                  onChangeText={onChange} 
+                />
+              )}
+            />
+            {metaForm.formState.errors.nome && (
+              <Text style={styles.errorText}>{metaForm.formState.errors.nome.message}</Text>
+            )}
+
             <View style={styles.rowInputs}>
-              <TextInput 
-                style={[styles.input, {flex: 1}]} 
-                placeholder="Alvo (R$)" 
-                placeholderTextColor={theme.colors.inputPlaceholder} 
-                keyboardType="numeric" 
-                value={poupObjetivo} 
-                onChangeText={(text) => setPoupObjetivo(formatCurrencyInput(text))} 
+              <Controller
+                control={metaForm.control}
+                name="objetivo"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput 
+                    style={[styles.input, {flex: 1}, metaForm.formState.errors.objetivo && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                    placeholder="Alvo (R$)" 
+                    placeholderTextColor={theme.colors.inputPlaceholder} 
+                    keyboardType="numeric" 
+                    value={value} 
+                    onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                  />
+                )}
               />
-              <TextInput 
-                style={[styles.input, {flex: 1}]} 
-                placeholder="Atual (R$)" 
-                placeholderTextColor={theme.colors.inputPlaceholder} 
-                keyboardType="numeric" 
-                value={poupAtual} 
-                onChangeText={(text) => setPoupAtual(formatCurrencyInput(text))} 
+              <Controller
+                control={metaForm.control}
+                name="atual"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput 
+                    style={[styles.input, {flex: 1}, metaForm.formState.errors.atual && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                    placeholder="Atual (R$)" 
+                    placeholderTextColor={theme.colors.inputPlaceholder} 
+                    keyboardType="numeric" 
+                    value={value} 
+                    onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                  />
+                )}
               />
             </View>
+            {(metaForm.formState.errors.objetivo || metaForm.formState.errors.atual) && (
+              <Text style={styles.errorText}>
+                {metaForm.formState.errors.objetivo?.message || metaForm.formState.errors.atual?.message}
+              </Text>
+            )}
+
             <TouchableOpacity style={styles.btnAdd} onPress={handleAddMeta} disabled={loadingAction === 'meta'}>
                {loadingAction === 'meta' ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnAddText}>+ Criar Meta</Text>}
             </TouchableOpacity>
@@ -428,17 +540,22 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* CONFIG */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Configurações</Text>
           <Text style={styles.label}>Teto de Gastos Variáveis</Text>
           <View style={{flexDirection: 'row', gap: 10}}>
-             <TextInput 
-               style={[styles.input, {flex: 1, marginBottom: 0}]} 
-               placeholderTextColor={theme.colors.inputPlaceholder} 
-               keyboardType="numeric" 
-               value={extraValor} 
-               onChangeText={(text) => setExtraValor(formatCurrencyInput(text))} 
+             <Controller
+               control={configForm.control}
+               name="extraGastosVariaveis"
+               render={({ field: { onChange, value } }) => (
+                 <TextInput 
+                   style={[styles.input, {flex: 1, marginBottom: 0}, configForm.formState.errors.extraGastosVariaveis && { borderColor: '#ef4444', borderWidth: 2 }]} 
+                   placeholderTextColor={theme.colors.inputPlaceholder} 
+                   keyboardType="numeric" 
+                   value={value} 
+                   onChangeText={(text) => onChange(formatCurrencyInput(text))} 
+                 />
+               )}
              />
              <TouchableOpacity style={[styles.btnSave, {width: 100}]} onPress={handleSaveConfig} disabled={loadingAction === 'config'}>
                 {loadingAction === 'config' ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnSaveText}>Salvar</Text>}
@@ -452,7 +569,6 @@ export const SettingsScreen: React.FC = () => {
   );
 };
 
-// --- FUNÇÃO GERADORA DE ESTILOS ---
 const createStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   keyboardView: { flex: 1 },
@@ -496,6 +612,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.colors.textPrimary
   },
   label: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '600', marginBottom: 6, marginTop: 2 },
+  errorText: { color: '#ef4444', fontSize: 12, marginTop: -8, marginBottom: 8, marginLeft: 4 },
   
   btnRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   btnResp: { flex: 1, paddingVertical: 8, borderRadius: 6, backgroundColor: theme.colors.inputBackground, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: theme.colors.border },

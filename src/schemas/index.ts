@@ -70,8 +70,8 @@ export const metaSchema = z.object({
       return !isNaN(num) && num > 0;
     }, 'Objetivo inválido'),
   atual: z.string()
-    .min(1, 'Valor atual é obrigatório')
     .refine((val) => {
+      if (!val || val.trim() === '') return true;
       const num = parseFloat(val.replace(',', '.').trim());
       return !isNaN(num) && num >= 0;
     }, 'Valor atual inválido'),

@@ -38,14 +38,12 @@ Aplicativo de controle financeiro pessoal desenvolvido com React Native e Expo.
 
 ```
 src/
-├── components/        # Componentes específicos
+├── components/        # Componentes reutilizáveis
 ├── constants/        # Constantes (categorias, etc)
 ├── hooks/           # Hooks customizados
 ├── schemas/         # Validações Zod
 ├── screens/         # Telas da aplicação
 ├── services/        # API e serviços externos
-├── shared/          # Código compartilhado
-│   └── ui/         # Componentes UI reutilizáveis
 ├── store/          # Estado global (Zustand)
 ├── theme/          # Sistema de temas
 ├── types/          # Tipos TypeScript
@@ -55,9 +53,6 @@ src/
 ## 🎨 Design System
 
 ### Componentes UI
-- **Button**: Botão com variantes (primary, secondary, danger, success)
-- **Input**: Input com label, validação e erro
-- **Card**: Card com variantes (default, elevated, outlined)
 - **Toast**: Notificações
 - **ProgressBar**: Barra de progresso
 - **CategorySelector**: Seletor de categorias com ícones

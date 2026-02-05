@@ -6,11 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-// Theme
 import { ThemeProvider, useTheme } from './src/theme';
-
-// Screens
 import DashboardScreen from './src/screens/DashboardScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
@@ -19,13 +15,9 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 const Tab = createBottomTabNavigator();
 const queryClient = new QueryClient();
 
-/**
- * Navigation content with theme-aware configuration
- */
 function NavigationContent() {
   const { theme, isDark } = useTheme();
 
-  // Theme-aware navigation theme
   const navigationTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
     colors: {
@@ -111,9 +103,6 @@ function NavigationContent() {
   );
 }
 
-/**
- * Main App component with all providers
- */
 export default function App() {
   return (
     <SafeAreaProvider>

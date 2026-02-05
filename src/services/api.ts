@@ -72,7 +72,7 @@ export const updateSharedConfig = async (key: string, value: number | string): P
   await fetch(GOOGLE_SCRIPT_URL, {
     method: 'POST',
     redirect: 'follow',
-    body: JSON.stringify({ action: 'UPDATE_CONFIG', chave: key, valor: value }),
+    body: JSON.stringify({ action: 'UPDATE_CONFIG', key, value }),
   });
 };
 

@@ -23,24 +23,18 @@ const getCurrentMonth = () => {
   return `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 };
 
-// --- FUNÇÃO AUXILIAR ESSENCIAL ---
-// Garante que o App entenda se é Crédito ou Débito vindo da planilha
 const detectPaymentMethod = (item: any): 'debit' | 'credit' => {
-  // Verifica todas as possibilidades de nome de coluna que o Google pode devolver
   const rawValue = item.paymentmethod || item.formapagamento || item.paymentMethod || '';
   const stringValue = String(rawValue).toLowerCase().trim();
   
-  // Se contiver "credit" ou "crédito", é Cartão de Crédito
   if (stringValue.includes('credit') || stringValue.includes('crédito') || stringValue.includes('credito')) {
     return 'credit';
   }
   
-  // Se estiver vazio ou for qualquer outra coisa, assume Débito/Pix
   return 'debit';
 };
 
 interface FinanceStore {
-  // Estado
   currentUser: string;
   extraGastosVariaveis: number;
   selectedMonth: string;
@@ -50,7 +44,6 @@ interface FinanceStore {
   recentTransactions: Transaction[];
   hideValues: boolean;
 
-  // Actions (Setters)
   setCurrentUser: (user: string) => void;
   setExtraGastosVariaveis: (valor: number) => void;
   setSelectedMonth: (month: string) => void;
@@ -71,22 +64,18 @@ interface FinanceStore {
 
   syncFromDrive: (data: DriveData) => void;
   
-  // Getters (Cálculos)
   getTransactionsByMonth: () => Transaction[];
   getRendaTotal: () => number;
-  
-  getGastosFixosDebit: () => number;    // Sai da conta (Pix/Débito)
-  getGastosVariaveisDebit: () => number; // Sai da conta (Pix/Débito)
-  
-  getInvoiceFixed: () => number;        // Fatura (Assinaturas Fixas)
-  getInvoiceVariable: () => number;     // Fatura (Compras Variáveis)
-  getInvoiceTotal: () => number;        // Fatura Total
+  getGastosFixosDebit: () => number;
+  getGastosVariaveisDebit: () => number;
+  getInvoiceFixed: () => number;
+  getInvoiceVariable: () => number;
+  getInvoiceTotal: () => number;
 }
 
 export const useFinanceStore = create<FinanceStore>()(
   persist(
     (set, get) => ({
-      // --- Estado Inicial ---
       currentUser: 'Usuário A',
       extraGastosVariaveis: 1000,
       selectedMonth: getCurrentMonth(),
@@ -96,21 +85,16 @@ export const useFinanceStore = create<FinanceStore>()(
       recentTransactions: [],
       hideValues: false,
 
-      // --- Setters Simples ---
       setCurrentUser: (user) => set({ currentUser: user }),
       setExtraGastosVariaveis: (valor) => set({ extraGastosVariaveis: valor }),
       setSelectedMonth: (month) => set({ selectedMonth: month }),
       setHideValues: (hide) => set({ hideValues: hide }),
 
-      // --- Getters Avançados ---
-
-      // 1. Renda Total (Soma salários)
       getRendaTotal: () => {
         const state = get();
         return (state.rendas || []).reduce((sum, r) => sum + (Number(r.valor) || 0), 0);
       },
 
-      // 2. Gastos Fixos no DÉBITO (Sai do saldo agora)
       getGastosFixosDebit: () => {
         const state = get();
         return (state.rendasFixas || [])
@@ -118,7 +102,6 @@ export const useFinanceStore = create<FinanceStore>()(
           .reduce((sum, r) => sum + (Number(r.valor) || 0), 0);
       },
 
-      // 3. Gastos Variáveis no DÉBITO (Sai do saldo agora)
       getGastosVariaveisDebit: () => {
         const transacoesDoMes = get().getTransactionsByMonth();
         return transacoesDoMes
@@ -126,7 +109,6 @@ export const useFinanceStore = create<FinanceStore>()(
           .reduce((sum, t) => sum + (Number(t.value) || 0), 0);
       },
 
-      // 4. Fatura - Parte FIXA (Ex: Netflix, Assinaturas)
       getInvoiceFixed: () => {
         const state = get();
         return (state.rendasFixas || [])
@@ -134,7 +116,6 @@ export const useFinanceStore = create<FinanceStore>()(
           .reduce((sum, r) => sum + (Number(r.valor) || 0), 0);
       },
 
-      // 5. Fatura - Parte VARIÁVEL (Ex: Uber, Ifood no crédito)
       getInvoiceVariable: () => {
         const transacoesDoMes = get().getTransactionsByMonth();
         return transacoesDoMes
@@ -142,12 +123,10 @@ export const useFinanceStore = create<FinanceStore>()(
           .reduce((sum, t) => sum + (Number(t.value) || 0), 0);
       },
 
-      // 6. Fatura TOTAL (Soma Fixos + Variáveis do mês)
       getInvoiceTotal: () => {
         return get().getInvoiceFixed() + get().getInvoiceVariable();
       },
 
-      // 7. Filtra transações pelo mês selecionado
       getTransactionsByMonth: () => {
         const state = get();
         const [mes, ano] = (state.selectedMonth || getCurrentMonth()).split('/');
@@ -159,7 +138,6 @@ export const useFinanceStore = create<FinanceStore>()(
         });
       },
 
-      // --- Manipulação de Listas (Add/Remove/Update) ---
       addPoupanca: (poupanca) => set((state) => ({ poupancas: [...(state.poupancas || []), poupanca] })),
       removePoupanca: (id) => set((state) => ({ poupancas: (state.poupancas || []).filter((p) => p.id !== id) })),
       updatePoupanca: (id, atual) => set((state) => ({ poupancas: (state.poupancas || []).map((p) => (p.id === id ? { ...p, atual } : p)) })),
@@ -173,28 +151,26 @@ export const useFinanceStore = create<FinanceStore>()(
       addTransaction: (transaction) => set((state) => ({ recentTransactions: [transaction, ...(state.recentTransactions || [])].slice(0, 500) })),
       clearTransactions: () => set({ recentTransactions: [] }),
 
-      // --- Sincronização com Google Drive ---
       syncFromDrive: (data: DriveData) => {
         const configArr = data.config || [];
-        const extraConfig = configArr.find((c: any) => c.chave === 'extraGastosVariaveis');
-        const extraValor = extraConfig ? Number(extraConfig.valor) || 1000 : 1000;
+        const extraConfig = configArr.find((c: any) => (c.chave || c.key) === 'extraGastosVariaveis');
+        const extraValor = extraConfig ? Number(extraConfig.valor || extraConfig.value) || 1000 : 1000;
         
-        const hideValuesConfig = configArr.find((c: any) => c.chave === 'hideValues');
-        const hideValuesDefault = hideValuesConfig ? hideValuesConfig.valor === 'true' : false;
+        const hideValuesConfig = configArr.find((c: any) => (c.chave || c.key) === 'hideValues');
+        const hideValuesDefault = hideValuesConfig ? (hideValuesConfig.valor || hideValuesConfig.value) === 'true' : false;
 
         set({
           extraGastosVariaveis: extraValor,
           hideValues: hideValuesDefault,
           
           recentTransactions: (data.transacoes || []).map((t: any) => ({
-            id: String(Math.random()), // Gera ID temporário
+            id: String(Math.random()),
             description: t.descricao || t.description || '',
             value: Number(t.valor || t.value) || 0,
             category: t.categoria || t.category || 'Outros',
             userName: t.usuario || t.user || 'Desconhecido',
             date: t.data || t.date || new Date().toISOString(),
             type: 'expense',
-            // Detecta corretamente se é Crédito ou Débito
             paymentMethod: detectPaymentMethod(t) 
           })),
 
@@ -203,7 +179,6 @@ export const useFinanceStore = create<FinanceStore>()(
             descricao: f.descricao || '',
             valor: Number(f.valor) || 0,
             responsavel: f.responsavel || 'Ambos',
-            // Detecta corretamente se é Crédito ou Débito
             paymentMethod: detectPaymentMethod(f)
           })),
 
