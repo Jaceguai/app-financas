@@ -74,6 +74,8 @@ export const InsightsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }
   };
 
   // Split transactions into months
+  // from_savings transactions are stored in the list but excluded from totals/categories
+  // so they never distort expense calculations
   const monthsData = useMemo(() => {
     const map: Record<string, MonthData> = {};
     allTx.forEach(t => {
@@ -82,12 +84,14 @@ export const InsightsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }
       if (!map[key]) {
         map[key] = { key, month: d.getMonth() + 1, year: d.getFullYear(), transactions: [], total: 0, credit: 0, debit: 0, byCategory: {} };
       }
-      const amt = Number(t.amount) || 0;
       map[key].transactions.push(t);
-      map[key].total += amt;
-      if (t.payment_method === 'credit') map[key].credit += amt;
-      else map[key].debit += amt;
-      map[key].byCategory[t.category] = (map[key].byCategory[t.category] || 0) + amt;
+      if (!t.from_savings) {
+        const amt = Number(t.amount) || 0;
+        map[key].total += amt;
+        if (t.payment_method === 'credit') map[key].credit += amt;
+        else map[key].debit += amt;
+        map[key].byCategory[t.category] = (map[key].byCategory[t.category] || 0) + amt;
+      }
     });
     // Sort by date descending
     return Object.values(map).sort((a, b) => {
@@ -362,9 +366,10 @@ export const InsightsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }
       }
     }
 
-    // Biggest transaction (always, informative)
-    if (current.transactions.length > 0) {
-      const biggestTx = [...current.transactions].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+    // Biggest transaction (always, informative) — exclude savings withdrawals
+    const regularTxCurrent = current.transactions.filter(t => !t.from_savings);
+    if (regularTxCurrent.length > 0) {
+      const biggestTx = [...regularTxCurrent].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
       const bigPct = totalCurrent > 0 ? ((Number(biggestTx.amount) || 0) / totalCurrent) * 100 : 0;
       if (bigPct > 15) {
         result.push({
@@ -555,9 +560,10 @@ export const InsightsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }
       }
 
       // Spending pattern (beginning vs end)
-      if (current.transactions.length >= 5) {
-        const firstHalf = current.transactions.filter(t => new Date(t.transaction_date).getDate() <= 15);
-        const secondHalf = current.transactions.filter(t => new Date(t.transaction_date).getDate() > 15);
+      const regularForPattern = current.transactions.filter(t => !t.from_savings);
+      if (regularForPattern.length >= 5) {
+        const firstHalf = regularForPattern.filter(t => new Date(t.transaction_date).getDate() <= 15);
+        const secondHalf = regularForPattern.filter(t => new Date(t.transaction_date).getDate() > 15);
         const firstTotal = firstHalf.reduce((s, t) => s + (Number(t.amount) || 0), 0);
         const secondTotal = secondHalf.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
@@ -706,7 +712,8 @@ export const InsightsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }
     const activeProjects = projects.filter(p => p.is_active);
     if (activeProjects.length > 0 && current) {
       activeProjects.forEach(project => {
-        const projectTxCurrent = current.transactions.filter(t => t.project_id === project.id);
+        // Regular project transactions (exclude savings for % of total, keep for budget)
+      const projectTxCurrent = current.transactions.filter(t => t.project_id === project.id && !t.from_savings);
         const projectTotal = projectTxCurrent.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
         if (projectTxCurrent.length === 0) return;

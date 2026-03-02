@@ -43,23 +43,19 @@ export const WorkspaceScreen: React.FC = () => {
   useEffect(() => {
   if (!user) return;
 
-// Esse código está PERFEITO para a nova política estrita
 const fetchWorkspaces = async () => {
   if (!user) return;
   setLoadingWorkspaces(true);
   try {
-    // CHAMADA RPC: Substitui todo o RLS e queries manuais.
-    // O Supabase chama a função no banco e traz os workspaces prontos.
     const { data, error } = await supabase.rpc('get_my_workspaces');
 
     if (error) throw error;
 
     if (data) {
-      // O RPC já retorna o array de workspaces correto (Workspace[])
       setUserWorkspaces(data);
     }
-  } catch (err: any) {
-    // silently fail
+  } catch {
+    // Network or RPC failure
   } finally {
     setLoadingWorkspaces(false);
   }

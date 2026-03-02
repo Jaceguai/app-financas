@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
 
 import { HamburgerMenu } from './src/components/navigation/HamburgerMenu';
+import { HelpScreen } from './src/screens/HelpScreen';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { WorkspaceProvider, useWorkspace } from './src/contexts/WorkspaceContext';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -27,6 +28,7 @@ import { AppearanceScreen } from './src/screens/settings/AppearanceScreen';
 import { FixedExpensesScreen } from './src/screens/settings/FixedExpensesScreen';
 import { IncomesScreen } from './src/screens/settings/IncomesScreen';
 import { PreferencesScreen } from './src/screens/settings/PreferencesScreen';
+import { SavingsGoalDetailScreen } from './src/screens/settings/SavingsGoalDetailScreen';
 import { SavingsGoalsScreen } from './src/screens/settings/SavingsGoalsScreen';
 import { MembersScreen } from './src/screens/workspace/MembersScreen';
 import { WorkspaceScreen } from './src/screens/workspace/WorkspaceScreen';
@@ -172,6 +174,12 @@ function MainNavigator() {
         </MainStack.Screen>
         <MainStack.Screen name="Insights">
           {({ navigation }) => <InsightsScreen onGoBack={() => navigation.goBack()} />}
+        </MainStack.Screen>
+        <MainStack.Screen name="SavingsGoalDetail">
+          {({ navigation, route }) => <SavingsGoalDetailScreen route={route} onGoBack={() => navigation.goBack()} />}
+        </MainStack.Screen>
+        <MainStack.Screen name="Help">
+          {({ navigation }) => <HelpScreen onGoBack={() => navigation.goBack()} />}
         </MainStack.Screen>
       </MainStack.Navigator>
     </>

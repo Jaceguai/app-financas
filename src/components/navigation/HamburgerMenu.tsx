@@ -55,6 +55,12 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ visible, onClose }
         { icon: 'color-palette-outline', label: 'Tema', screen: 'Appearance', color: '#f59e0b' },
       ],
     },
+    {
+      section: 'Suporte',
+      items: [
+        { icon: 'help-circle-outline', label: 'Ajuda & Como usar', screen: 'Help', color: '#0ea5e9' },
+      ],
+    },
   ];
 
   return (

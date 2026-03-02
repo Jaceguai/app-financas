@@ -11,9 +11,7 @@ export const AppearanceScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack
   const { colorScheme } = useColorScheme();
 
   const handleToggle = async () => {
-    console.log('Tema atual:', isDark ? 'escuro' : 'claro');
     await toggleTheme();
-    console.log('Tema alterado para:', !isDark ? 'escuro' : 'claro');
   };
 
   return (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../contexts/WorkspaceContext';
+import { supabase } from '../lib/supabase';
 
 export interface WorkspaceSetting {
   id: string;
@@ -16,7 +16,6 @@ export const useWorkspaceSettings = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  // Busca todas as configurações do workspace
   const fetchSettings = useCallback(async () => {
     if (!workspace) {
       setSettings({});
@@ -33,22 +32,19 @@ export const useWorkspaceSettings = () => {
 
       if (error) throw error;
 
-      // Converte array para objeto { key: value }
       const settingsMap: Record<string, string> = {};
       data?.forEach((setting) => {
         settingsMap[setting.key] = setting.value;
       });
 
       setSettings(settingsMap);
-    } catch (err) {
-      console.error('Erro ao buscar settings:', err);
+    } catch {
       setSettings({});
     } finally {
       setLoading(false);
     }
   }, [workspace]);
 
-  // Atualiza ou cria uma configuração
   const updateSetting = async (key: string, value: string) => {
     if (!workspace) return { error: 'Workspace não selecionado' };
 
@@ -66,22 +62,18 @@ export const useWorkspaceSettings = () => {
 
       if (error) throw error;
 
-      // Atualiza localmente
       setSettings((prev) => ({ ...prev, [key]: value }));
 
       return { error: null };
     } catch (err: any) {
-      console.error('Erro ao atualizar setting:', err);
       return { error: err.message };
     }
   };
 
-  // Busca uma configuração específica
   const getSetting = (key: string, defaultValue: string = ''): string => {
     return settings[key] || defaultValue;
   };
 
-  // Busca configuração como número
   const getSettingAsNumber = (key: string, defaultValue: number = 0): number => {
     const value = settings[key];
     if (!value) return defaultValue;
@@ -89,12 +81,10 @@ export const useWorkspaceSettings = () => {
     return isNaN(parsed) ? defaultValue : parsed;
   };
 
-  // Carrega settings quando workspace muda
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Realtime: Escuta mudanças nas configurações
   useEffect(() => {
     if (!workspace) return;
 
@@ -108,9 +98,8 @@ export const useWorkspaceSettings = () => {
           table: 'workspace_settings',
           filter: `workspace_id=eq.${workspace.id}`,
         },
-        (payload) => {
-          console.log('Setting atualizado em tempo real:', payload);
-          fetchSettings(); // Recarrega quando houver mudança
+        () => {
+          fetchSettings();
         }
       )
       .subscribe();

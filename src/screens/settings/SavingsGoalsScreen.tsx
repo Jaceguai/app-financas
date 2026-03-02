@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -15,6 +16,7 @@ import { formatCurrency, formatCurrencyInput, parseCurrency } from '../../utils/
 export const SavingsGoalsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBack }) => {
   const { isDark } = useTheme();
   const { workspace } = useWorkspace();
+  const navigation = useNavigation();
   const { data: savingsGoals = [] } = useSavingsGoals(workspace?.id);
   const addSavingsGoal = useAddSavingsGoal();
   const depositToGoal = useDepositToGoal();
@@ -182,8 +184,10 @@ export const SavingsGoalsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBa
           {savingsGoals.map((goal) => {
             const progress = (Number(goal.current_amount) / Number(goal.target_amount)) * 100;
             return (
-              <View
+              <TouchableOpacity
                 key={goal.id}
+                activeOpacity={0.85}
+                onPress={() => (navigation as any).navigate('SavingsGoalDetail', { goalId: goal.id, goalName: goal.name })}
                 className="p-4 mb-3 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700"
               >
                 <View className="flex-row items-start justify-between mb-3">
@@ -221,16 +225,27 @@ export const SavingsGoalsScreen: React.FC<{ onGoBack?: () => void }> = ({ onGoBa
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  onPress={() => openDepositModal(goal.id)}
-                  className="flex-row items-center justify-center gap-2 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 mt-2"
-                >
-                  <Ionicons name="add-circle" size={20} color="#3b82f6" />
-                  <Text className="text-blue-600 dark:text-blue-400 font-semibold">
-                    Adicionar Depósito
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                <View className="flex-row gap-2 mt-2">
+                  <TouchableOpacity
+                    onPress={() => openDepositModal(goal.id)}
+                    className="flex-1 flex-row items-center justify-center gap-2 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20"
+                  >
+                    <Ionicons name="add-circle" size={18} color="#3b82f6" />
+                    <Text className="text-blue-600 dark:text-blue-400 font-semibold text-sm">
+                      Depositar
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => (navigation as any).navigate('SavingsGoalDetail', { goalId: goal.id, goalName: goal.name })}
+                    className="flex-row items-center justify-center gap-1 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-slate-700"
+                  >
+                    <Ionicons name="time-outline" size={16} color={isDark ? '#94a3b8' : '#6b7280'} />
+                    <Text className="text-gray-600 dark:text-slate-400 font-semibold text-sm">
+                      Histórico
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
             );
           })}
 

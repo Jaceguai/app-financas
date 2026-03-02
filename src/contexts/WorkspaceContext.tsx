@@ -4,7 +4,6 @@ import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
-// Tipagens
 export interface Workspace {
   id: string;
   name: string;
@@ -49,7 +48,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const currentMember = members.find(m => m.user_id === user?.id) ?? null;
 
-  // Busca membros do workspace atual usando RPC
   const fetchMembers = useCallback(async (workspaceId: string) => {
     try {
       const { data, error } = await supabase.rpc('get_workspace_members', {
@@ -72,7 +70,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, [workspace, fetchMembers]);
 
-  // Ref to track if we're already handling a workspace removal
   const handlingRemoval = useRef(false);
 
   const handleWorkspaceGone = useCallback(async (reason: 'deleted' | 'removed') => {
@@ -91,7 +88,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     handlingRemoval.current = false;
   }, []);
 
-  // Realtime: Escuta exclusão do workspace
   useEffect(() => {
     if (!workspace) return;
 
@@ -116,7 +112,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
   }, [workspace, handleWorkspaceGone]);
 
-  // Realtime: Escuta mudanças nos membros (inclusão, remoção, atualização)
   useEffect(() => {
     if (!workspace || !user) return;
 
@@ -131,7 +126,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           filter: `workspace_id=eq.${workspace.id}`,
         },
         (payload) => {
-          // Se o membro removido é o usuário atual, redirecionar
           const old = payload.old as any;
           if (old?.user_id === user.id) {
             handleWorkspaceGone('removed');
@@ -171,7 +165,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
   }, [workspace, user, fetchMembers, handleWorkspaceGone]);
 
-  // Carrega o workspace salvo ao iniciar
   useEffect(() => {
     if (!user) {
       setWorkspace(null);
@@ -185,10 +178,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       try {
         const savedId = await SecureStore.getItemAsync(WORKSPACE_KEY);
 
-        // Se tivermos um ID salvo, tentamos buscar os dados
         if (savedId) {
-            // Nota: Usamos rpc ou select direto dependendo da sua política.
-            // Select direto deve funcionar se a política 'ver_meus_workspaces' estiver ativa.
             const { data, error } = await supabase
               .from('workspaces')
               .select('*')
@@ -199,7 +189,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
               setWorkspace(data);
               await fetchMembers(data.id);
             } else {
-              // Se der erro (ex: foi removido do workspace), limpa o storage
               await SecureStore.deleteItemAsync(WORKSPACE_KEY);
             }
         }
@@ -213,59 +202,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     loadWorkspace();
   }, [user, fetchMembers]);
 
-  // Define qual workspace está em uso no app
   const setActiveWorkspace = async (ws: Workspace) => {
     setWorkspace(ws);
     await SecureStore.setItemAsync(WORKSPACE_KEY, ws.id);
     await fetchMembers(ws.id);
   };
 
-  // Cria um novo workspace
   const createWorkspace = async (name: string, displayName: string) => {
     if (!user) return { error: 'Não autenticado' };
 
     try {
-      // 1. Cria o workspace na tabela workspaces
-      const { data: wsData, error: wsError } = await supabase
-        .from('workspaces')
-        .insert({ name, created_by: user.id })
-        .select()
-        .single();
-
-      if (wsError) throw wsError;
-
-      // 2. Adiciona o criador como membro (Owner)
-      const { error: memberError } = await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: wsData.id,
-          user_id: user.id,
-          display_name: displayName,
-          role: 'owner',
-        });
-
-      if (memberError) throw memberError;
-
-      // 3. Define como ativo automaticamente
-      await setActiveWorkspace(wsData);
-
-      return { error: null };
-    } catch (err: any) {
-      return { error: err.message };
-    }
-  };
-
-  // Entra em um workspace existente via código
-  const joinWorkspace = async (code: string, displayName: string) => { // displayName já vem aqui
-    if (!code.trim()) return { error: "Código inválido" };
-    // Adicione uma validação simples se quiser
-    if (!displayName.trim()) return { error: "Nome de exibição obrigatório" };
-
-    try {
-      // CORREÇÃO AQUI: Passamos o display_name_input para o SQL
-      const { data, error } = await supabase.rpc('join_workspace_by_code', {
-        code_input: code.trim(),
-        display_name_input: displayName.trim() // <--- O SQL agora espera e usa isso
+      const { data, error } = await supabase.rpc('create_workspace', {
+        ws_name: name.trim(),
+        owner_display_name: displayName.trim(),
       });
 
       if (error) throw error;
@@ -274,7 +223,38 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         return { error: data.error };
       }
 
-      // Resto do código continua igual (buscar workspace, ativar, etc...)
+      const ws: Workspace = {
+        id: data.workspace_id,
+        name: data.workspace_name,
+        created_by: user.id,
+        invite_code: data.invite_code,
+        created_at: data.created_at,
+      };
+
+      await setActiveWorkspace(ws);
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  };
+
+  const joinWorkspace = async (code: string, displayName: string) => {
+    if (!code.trim()) return { error: "Código inválido" };
+    if (!displayName.trim()) return { error: "Nome de exibição obrigatório" };
+
+    try {
+      const { data, error } = await supabase.rpc('join_workspace_by_code', {
+        code_input: code.trim(),
+        display_name_input: displayName.trim(),
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        return { error: data.error };
+      }
+
       const { data: wsData, error: wsError } = await supabase
         .from('workspaces')
         .select('*')
@@ -298,7 +278,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     await SecureStore.deleteItemAsync(WORKSPACE_KEY);
   };
 
-  // Sair do workspace atual (para membros)
   const leaveCurrentWorkspace = async () => {
     if (!workspace) return { error: 'Nenhum workspace selecionado' };
 
@@ -313,7 +292,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         return { error: data.error };
       }
 
-      // Limpa o estado local
       await leaveWorkspace();
       return { error: null };
     } catch (err: any) {
@@ -321,7 +299,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  // Excluir workspace (apenas dono)
   const deleteWorkspace = async () => {
     if (!workspace) return { error: 'Nenhum workspace selecionado' };
 
@@ -336,7 +313,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         return { error: data.error };
       }
 
-      // Limpa o estado local
       await leaveWorkspace();
       return { error: null };
     } catch (err: any) {

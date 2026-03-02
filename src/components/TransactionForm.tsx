@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React, { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { useAddTransaction } from '../hooks/useSupabaseMutations';
-import { useProjects } from '../hooks/useSupabaseQuery';
+import { useAddTransaction, useWithdrawFromSavings } from '../hooks/useSupabaseMutations';
+import { useProjects, useSavingsGoals } from '../hooks/useSupabaseQuery';
 import { TransactionFormData, transactionSchema } from '../schemas';
 import { useTheme } from '../theme';
 import { CategorySelector } from './CategorySelector';
@@ -17,9 +17,13 @@ export const TransactionForm: React.FC = () => {
   const { workspace } = useWorkspace();
   const { isDark } = useTheme();
   const addTransaction = useAddTransaction();
+  const withdrawFromSavings = useWithdrawFromSavings();
   const { data: projects = [] } = useProjects(workspace?.id);
+  const { data: savingsGoals = [] } = useSavingsGoals(workspace?.id);
   const activeProjects = projects.filter(p => p.is_active !== false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [fromSavings, setFromSavings] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     visible: false, message: '', type: 'info',
@@ -27,27 +31,34 @@ export const TransactionForm: React.FC = () => {
 
   const { control, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
-    defaultValues: { value: '', description: '', category: 'Alimentação', paymentMethod: 'debit', installments: 1 },
+    defaultValues: { value: '', description: '', category: 'Alimentação', paymentMethod: 'debit', installments: 1, fromSavings: false },
   });
 
   const paymentMethod = watch('paymentMethod');
   const installments = watch('installments') || 1;
 
+  const isPending = addTransaction.isPending || withdrawFromSavings.isPending;
+  const isSuccess = addTransaction.isSuccess || withdrawFromSavings.isSuccess;
+  const isError = addTransaction.isError || withdrawFromSavings.isError;
+
   useEffect(() => {
-    if (addTransaction.isSuccess) {
+    if (isSuccess) {
       reset();
       setSelectedProjectId(null);
+      setFromSavings(false);
+      setSelectedGoalId(null);
       addTransaction.reset();
+      withdrawFromSavings.reset();
       setToast({ visible: true, message: 'Transação registrada!', type: 'success' });
       setTimeout(() => setToast(t => ({ ...t, visible: false })), 3000);
     }
-  }, [addTransaction.isSuccess]);
+  }, [isSuccess]);
 
   useEffect(() => {
-    if (addTransaction.isError) {
+    if (isError) {
       setToast({ visible: true, message: 'Erro ao registrar transação.', type: 'error' });
     }
-  }, [addTransaction.isError]);
+  }, [isError]);
 
   const formatCurrency = (text: string) => {
     const numbers = text.replace(/\D/g, '');
@@ -59,16 +70,34 @@ export const TransactionForm: React.FC = () => {
 
   const onSubmit = (data: TransactionFormData) => {
     if (!workspace || !user) return;
-    addTransaction.mutate({
-      workspace_id: workspace.id,
-      user_id: user.id,
-      description: data.description.trim(),
-      amount: parseValue(data.value),
-      category: data.category,
-      payment_method: data.paymentMethod,
-      installments: data.paymentMethod === 'credit' ? data.installments : undefined,
-      project_id: selectedProjectId,
-    });
+
+    if (fromSavings) {
+      if (!selectedGoalId) {
+        setToast({ visible: true, message: 'Selecione uma meta de poupança.', type: 'error' });
+        return;
+      }
+      withdrawFromSavings.mutate({
+        workspace_id: workspace.id,
+        user_id: user.id,
+        description: data.description.trim(),
+        amount: parseValue(data.value),
+        category: data.category,
+        transaction_date: new Date().toISOString(),
+        savings_goal_id: selectedGoalId,
+        project_id: selectedProjectId,
+      });
+    } else {
+      addTransaction.mutate({
+        workspace_id: workspace.id,
+        user_id: user.id,
+        description: data.description.trim(),
+        amount: parseValue(data.value),
+        category: data.category,
+        payment_method: data.paymentMethod,
+        installments: data.paymentMethod === 'credit' ? data.installments : undefined,
+        project_id: selectedProjectId,
+      });
+    }
   };
 
   return (
@@ -98,42 +127,125 @@ export const TransactionForm: React.FC = () => {
       </View>
 
       <View className="mx-4 mt-6">
-        <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Forma de Pagamento</Text>
+        <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Descrição</Text>
         <Controller
           control={control}
-          name="paymentMethod"
+          name="description"
           render={({ field: { onChange, value } }) => (
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                className={`flex-1 py-3.5 rounded-lg items-center border-2 ${
-                  value === 'debit'
-                    ? 'bg-blue-500 dark:bg-blue-600 border-blue-500 dark:border-blue-600'
-                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
-                }`}
-                onPress={() => onChange('debit')}
-              >
-                <Text className={`font-semibold text-sm ${value === 'debit' ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                  Débito / Pix
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={`flex-1 py-3.5 rounded-lg items-center border-2 ${
-                  value === 'credit'
-                    ? 'bg-amber-500 dark:bg-amber-600 border-amber-500 dark:border-amber-600'
-                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
-                }`}
-                onPress={() => onChange('credit')}
-              >
-                <Text className={`font-semibold text-sm ${value === 'credit' ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                  Crédito (Fatura)
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TextInput
+              className={`rounded-xl p-5 text-base border shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white ${
+                errors.description ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-slate-700'
+              }`}
+              value={value}
+              onChangeText={onChange}
+              placeholder="Ex: Supermercado"
+              placeholderTextColor="#9ca3af"
+            />
           )}
         />
+        {errors.description && <Text className="text-red-500 text-xs mt-1 ml-1">{errors.description.message}</Text>}
       </View>
 
-      {paymentMethod === 'credit' && (
+      {/* Toggle: Retirar da poupança */}
+      <View className="mx-4 mt-4">
+        <View className="flex-row items-center justify-between rounded-xl px-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <View className="flex-row items-center gap-3 py-5">
+            <Ionicons name="wallet-outline" size={20} color={fromSavings ? '#10b981' : (isDark ? '#94a3b8' : '#6b7280')} />
+            <Text className={`text-base font-semibold ${fromSavings ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'}`}>
+              Retirar da poupança
+            </Text>
+          </View>
+          <View>
+            <Switch
+            value={fromSavings}
+            onValueChange={(val) => {
+              setFromSavings(val);
+              if (!val) setSelectedGoalId(null);
+            }}
+            trackColor={{ false: '#d1d5db', true: '#6ee7b7' }}
+            thumbColor={fromSavings ? '#10b981' : '#9ca3af'}
+          />
+        </View>
+          </View>
+      </View>
+
+      {/* Goal selector — only when fromSavings is ON */}
+      {fromSavings && (
+        <View className="mx-4 mt-4">
+          <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Meta de poupança</Text>
+          {savingsGoals.length === 0 ? (
+            <View className="rounded-xl p-4 border bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 items-center">
+              <Text className="text-sm text-gray-400 dark:text-slate-500">Nenhuma meta cadastrada</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+              {savingsGoals.map((goal) => (
+                <TouchableOpacity
+                  key={goal.id}
+                  onPress={() => setSelectedGoalId(goal.id)}
+                  className={`px-4 py-3 rounded-xl border gap-1 ${
+                    selectedGoalId === goal.id
+                      ? 'bg-emerald-500 dark:bg-emerald-600 border-emerald-500 dark:border-emerald-600'
+                      : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
+                  }`}
+                >
+                  <Text className={`text-xs font-bold ${selectedGoalId === goal.id ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                    {goal.name}
+                  </Text>
+                  <Text className={`text-xs ${selectedGoalId === goal.id ? 'text-emerald-100' : 'text-gray-400 dark:text-slate-500'}`}>
+                    R$ {Number(goal.current_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {!selectedGoalId && (
+            <Text className="text-red-500 text-xs mt-1 ml-1">Selecione uma meta de poupança</Text>
+          )}
+        </View>
+      )}
+
+      {/* Payment method — hidden when fromSavings */}
+      {!fromSavings && (
+        <View className="mx-4 mt-6">
+          <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Forma de Pagamento</Text>
+          <Controller
+            control={control}
+            name="paymentMethod"
+            render={({ field: { onChange, value } }) => (
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className={`flex-1 py-3.5 rounded-lg items-center border-2 ${
+                    value === 'debit'
+                      ? 'bg-blue-500 dark:bg-blue-600 border-blue-500 dark:border-blue-600'
+                      : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
+                  }`}
+                  onPress={() => onChange('debit')}
+                >
+                  <Text className={`font-semibold text-sm ${value === 'debit' ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                    Débito / Pix
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className={`flex-1 py-3.5 rounded-lg items-center border-2 ${
+                    value === 'credit'
+                      ? 'bg-amber-500 dark:bg-amber-600 border-amber-500 dark:border-amber-600'
+                      : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
+                  }`}
+                  onPress={() => onChange('credit')}
+                >
+                  <Text className={`font-semibold text-sm ${value === 'credit' ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                    Crédito (Fatura)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
+        </View>
+      )}
+
+      {/* Installments — only when credit and not fromSavings */}
+      {!fromSavings && paymentMethod === 'credit' && (
         <View className="mx-4 mt-6">
           <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Parcelas</Text>
           <View className="rounded-xl p-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
@@ -179,26 +291,6 @@ export const TransactionForm: React.FC = () => {
           </View>
         </View>
       )}
-
-      <View className="mx-4 mt-6">
-        <Text className="text-base font-semibold mb-3 text-gray-700 dark:text-gray-300">Descrição</Text>
-        <Controller
-          control={control}
-          name="description"
-          render={({ field: { onChange, value } }) => (
-            <TextInput
-              className={`rounded-xl p-4 text-base border shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white ${
-                errors.description ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-slate-700'
-              }`}
-              value={value}
-              onChangeText={onChange}
-              placeholder="Ex: Supermercado"
-              placeholderTextColor="#9ca3af"
-            />
-          )}
-        />
-        {errors.description && <Text className="text-red-500 text-xs mt-1 ml-1">{errors.description.message}</Text>}
-      </View>
 
       <Controller
         control={control}
@@ -253,17 +345,21 @@ export const TransactionForm: React.FC = () => {
       <View className="mx-4 mt-6">
         <TouchableOpacity
           onPress={handleSubmit(onSubmit)}
-          disabled={addTransaction.isPending}
+          disabled={isPending}
           className={`rounded-xl py-4 ${
-            addTransaction.isPending
+            isPending
               ? 'bg-gray-400 dark:bg-gray-600'
-              : 'bg-primary-500 dark:bg-primary-600'
+              : fromSavings
+                ? 'bg-emerald-500 dark:bg-emerald-600'
+                : 'bg-primary-500 dark:bg-primary-600'
           }`}
         >
-          {addTransaction.isPending ? (
+          {isPending ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text className="text-white text-center text-lg font-bold">Confirmar Gasto</Text>
+            <Text className="text-white text-center text-lg font-bold">
+              {fromSavings ? 'Registrar Retirada' : 'Confirmar Gasto'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { FixedExpense, Income, Project, SavingsGoal, Transaction, WorkspaceConfig } from '../types';
+import { FixedExpense, Income, Project, SavingsDeposit, SavingsGoal, Transaction, WorkspaceConfig } from '../types';
 
 const generateUUID = (): string => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -24,8 +24,7 @@ export const insertTransaction = async (data: {
   const totalInstallments = data.installments && data.installments > 1 ? data.installments : null;
 
   if (totalInstallments) {
-    // Parcelado: criar N transações distribuídas nos meses seguintes
-    const installmentId = generateUUID();
+      const installmentId = generateUUID();
     const installmentAmount = Math.round((data.amount / totalInstallments) * 100) / 100;
     const now = new Date();
 
@@ -55,7 +54,6 @@ export const insertTransaction = async (data: {
     return result[0];
   }
 
-  // Compra à vista (sem parcelas)
   const { data: result, error } = await supabase
     .from('transactions')
     .insert({
@@ -75,30 +73,48 @@ export const insertTransaction = async (data: {
   return result;
 };
 
+export const withdrawFromSavings = async (data: {
+  workspace_id: string;
+  user_id: string;
+  description: string;
+  amount: number;
+  category: string;
+  transaction_date: string;
+  savings_goal_id: string;
+  project_id?: string | null;
+}): Promise<Transaction> => {
+  const { data: result, error } = await supabase.rpc('insert_savings_withdrawal', {
+    p_workspace_id: data.workspace_id,
+    p_user_id: data.user_id,
+    p_description: data.description,
+    p_amount: data.amount,
+    p_category: data.category,
+    p_transaction_date: data.transaction_date,
+    p_savings_goal_id: data.savings_goal_id,
+    p_project_id: data.project_id ?? null,
+  });
+  if (error) throw new Error(error.message);
+  return result;
+};
+
 export const deleteTransaction = async (id: string): Promise<void> => {
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) throw new Error(error.message);
 };
 
-export const fetchTransactions = async (workspaceId: string, month?: string): Promise<Transaction[]> => {
-  // DEBUG: Verificar acesso
-  const { data: debugData } = await supabase.rpc('debug_workspace_access', { ws_id: workspaceId });
-  console.log('DEBUG workspace access:', debugData);
+export const deleteTransactionGroup = async (installmentId: string): Promise<void> => {
+  const { error } = await supabase.from('transactions').delete().eq('installment_id', installmentId);
+  if (error) throw new Error(error.message);
+};
 
-  // Usa RPC para bypassar problemas de RLS
+export const fetchTransactions = async (workspaceId: string, month?: string): Promise<Transaction[]> => {
   const { data, error } = await supabase.rpc('get_workspace_transactions', {
     ws_id: workspaceId,
     month_filter: null,
   });
 
-  console.log('Transações retornadas:', data?.length || 0, 'erro:', error?.message);
+  if (error) throw new Error(error.message);
 
-  if (error) {
-    console.error('Erro ao buscar transações:', error);
-    throw new Error(error.message);
-  }
-
-  // Se tiver filtro de mês, filtra no cliente
   if (month && data) {
     const [mes, ano] = month.split('/');
     return data.filter((t: Transaction) => {
@@ -135,7 +151,6 @@ export const deleteFixedExpense = async (id: string): Promise<void> => {
 };
 
 export const fetchFixedExpenses = async (workspaceId: string): Promise<FixedExpense[]> => {
-  // Usa RPC para bypassar problemas de RLS
   const { data, error } = await supabase.rpc('get_workspace_fixed_expenses', {
     ws_id: workspaceId,
   });
@@ -168,7 +183,6 @@ export const deleteIncome = async (id: string): Promise<void> => {
 };
 
 export const fetchIncomes = async (workspaceId: string): Promise<Income[]> => {
-  // Usa RPC para bypassar problemas de RLS
   const { data, error } = await supabase.rpc('get_workspace_incomes', {
     ws_id: workspaceId,
   });
@@ -196,24 +210,10 @@ export const insertSavingsGoal = async (data: {
 };
 
 export const depositToGoal = async (id: string, additionalAmount: number): Promise<SavingsGoal> => {
-  // First get current amount
-  const { data: current, error: fetchError } = await supabase
-    .from('savings_goals')
-    .select('current_amount')
-    .eq('id', id)
-    .single();
-
-  if (fetchError) throw new Error(fetchError.message);
-
-  const newAmount = (Number(current.current_amount) || 0) + additionalAmount;
-
-  const { data: result, error } = await supabase
-    .from('savings_goals')
-    .update({ current_amount: newAmount })
-    .eq('id', id)
-    .select()
-    .single();
-
+  const { data: result, error } = await supabase.rpc('deposit_to_goal', {
+    p_goal_id: id,
+    p_amount: additionalAmount,
+  });
   if (error) throw new Error(error.message);
   return result;
 };
@@ -223,8 +223,28 @@ export const deleteSavingsGoal = async (id: string): Promise<void> => {
   if (error) throw new Error(error.message);
 };
 
+export const fetchSavingsDeposits = async (goalId: string): Promise<SavingsDeposit[]> => {
+  const { data, error } = await supabase
+    .from('savings_deposits')
+    .select('*')
+    .eq('savings_goal_id', goalId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+};
+
+export const fetchSavingsGoalTransactions = async (goalId: string): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('savings_goal_id', goalId)
+    .eq('from_savings', true)
+    .order('transaction_date', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+};
+
 export const fetchSavingsGoals = async (workspaceId: string): Promise<SavingsGoal[]> => {
-  // Usa RPC para bypassar problemas de RLS
   const { data, error } = await supabase.rpc('get_workspace_savings_goals', {
     ws_id: workspaceId,
   });
@@ -247,7 +267,6 @@ export const upsertConfig = async (workspaceId: string, key: string, value: stri
 };
 
 export const fetchConfig = async (workspaceId: string): Promise<WorkspaceConfig[]> => {
-  // Usa RPC para bypassar problemas de RLS
   const { data, error } = await supabase.rpc('get_workspace_settings', {
     ws_id: workspaceId,
   });

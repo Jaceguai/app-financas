@@ -30,6 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# AI tooling
+.claude/
+.windsurf/
+
 # local env files
 .env
 .env*.local

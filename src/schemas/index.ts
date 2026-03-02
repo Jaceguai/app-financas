@@ -50,9 +50,14 @@ export const transactionSchema = z.object({
   category: z.string().min(1, 'Categoria é obrigatória'),
   paymentMethod: z.enum(['debit', 'credit']),
   installments: z.number().min(1).max(48).optional(),
-});
+  fromSavings: z.boolean().optional().default(false),
+  savingsGoalId: z.string().uuid().optional(),
+}).refine(
+  (data) => !data.fromSavings || !!data.savingsGoalId,
+  { message: 'Selecione uma meta de poupança', path: ['savingsGoalId'] },
+);
 
-export type TransactionFormData = z.infer<typeof transactionSchema>;
+export type TransactionFormData = z.input<typeof transactionSchema>;
 
 // ========== Fixed Expense Schema ==========
 

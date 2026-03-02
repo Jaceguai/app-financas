@@ -2,19 +2,20 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-    fetchConfig,
-    fetchFixedExpenses,
-    fetchIncomes,
-    fetchProjectTransactions,
-    fetchProjects,
-    fetchSavingsGoals,
-    fetchTransactions,
+  fetchConfig,
+  fetchFixedExpenses,
+  fetchIncomes,
+  fetchProjectTransactions,
+  fetchProjects,
+  fetchSavingsDeposits,
+  fetchSavingsGoalTransactions,
+  fetchSavingsGoals,
+  fetchTransactions,
 } from '../services/api';
 
 export const useTransactions = (workspaceId: string | undefined, month?: string) => {
   const queryClient = useQueryClient();
 
-  // Realtime subscription
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -50,7 +51,6 @@ export const useTransactions = (workspaceId: string | undefined, month?: string)
 export const useFixedExpenses = (workspaceId: string | undefined) => {
   const queryClient = useQueryClient();
 
-  // Realtime subscription
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -86,7 +86,6 @@ export const useFixedExpenses = (workspaceId: string | undefined) => {
 export const useIncomes = (workspaceId: string | undefined) => {
   const queryClient = useQueryClient();
 
-  // Realtime subscription
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -122,7 +121,6 @@ export const useIncomes = (workspaceId: string | undefined) => {
 export const useSavingsGoals = (workspaceId: string | undefined) => {
   const queryClient = useQueryClient();
 
-  // Realtime subscription
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -158,7 +156,6 @@ export const useSavingsGoals = (workspaceId: string | undefined) => {
 export const useWorkspaceConfig = (workspaceId: string | undefined) => {
   const queryClient = useQueryClient();
 
-  // Realtime subscription
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -231,6 +228,24 @@ export const useProjectTransactions = (projectId: string | undefined) => {
     queryKey: ['project_transactions', projectId],
     queryFn: () => fetchProjectTransactions(projectId!),
     enabled: !!projectId,
+    staleTime: 1000 * 60 * 2,
+  });
+};
+
+export const useSavingsDeposits = (goalId: string | undefined) => {
+  return useQuery({
+    queryKey: ['savings_deposits', goalId],
+    queryFn: () => fetchSavingsDeposits(goalId!),
+    enabled: !!goalId,
+    staleTime: 1000 * 60 * 2,
+  });
+};
+
+export const useSavingsGoalTransactions = (goalId: string | undefined) => {
+  return useQuery({
+    queryKey: ['savings_goal_transactions', goalId],
+    queryFn: () => fetchSavingsGoalTransactions(goalId!),
+    enabled: !!goalId,
     staleTime: 1000 * 60 * 2,
   });
 };

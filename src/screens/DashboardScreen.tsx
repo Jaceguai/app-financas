@@ -31,8 +31,14 @@ export default function DashboardScreen() {
     .filter(r => r.payment_method !== 'credit')
     .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
+  const savingsWithdrawals = transactions
+    .filter(t => t.from_savings)
+    .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
+  const savingsWithdrawalTotal = savingsWithdrawals.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const lastSavingsWithdrawals = savingsWithdrawals.slice(0, 3);
+
   const gastosMesDebit = transactions
-    .filter(t => t.payment_method !== 'credit')
+    .filter(t => t.payment_method !== 'credit' && !t.from_savings)
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   const invoiceFixed = fixedExpenses
@@ -139,6 +145,35 @@ export default function DashboardScreen() {
             <Text className="text-sm font-semibold text-gray-900 dark:text-slate-100">{formatCurrency(invoiceVariable, localHideValues)}</Text>
           </View>
         </View>
+
+        {/* Savings Withdrawals */}
+        {savingsWithdrawalTotal > 0 && (
+          <View className="rounded-xl p-4 mb-4 border border-l-4 border-l-emerald-500 shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+            <View className="flex-row justify-between items-center mb-3">
+              <View className="flex-row items-center gap-2">
+                <Ionicons name="wallet-outline" size={22} color={isDark ? '#6ee7b7' : '#10b981'} />
+                <Text className="text-base font-bold text-gray-900 dark:text-slate-100">Retiradas da poupança</Text>
+              </View>
+              <Text className="text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(savingsWithdrawalTotal, localHideValues)}</Text>
+            </View>
+            <View className="flex-row gap-2">
+              {lastSavingsWithdrawals.map((t) => {
+                const d = new Date(t.transaction_date);
+                const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <View key={t.id} className="flex-1 rounded-xl p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800">
+                    <Text className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-1" numberOfLines={1}>
+                      {localHideValues ? '••••' : formatCurrency(Number(t.amount))}
+                    </Text>
+                    <Text className="text-[10px] text-emerald-600 dark:text-emerald-400" numberOfLines={1}>{t.description}</Text>
+                    <Text className="text-[10px] text-emerald-500 dark:text-emerald-500 mt-1">{date} {time}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Installments Tracking */}
         {installmentItems.length > 0 && (

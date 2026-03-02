@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useProjectTransactions, useProjects } from '../../hooks/useSupabaseQuery';
+import { useProjectTransactions, useProjects, useSavingsGoals } from '../../hooks/useSupabaseQuery';
 import { useTheme } from '../../theme';
 import { formatCurrency } from '../../utils/formatters';
 import { Transaction } from '../../types';
@@ -15,7 +15,15 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
   const projectName = route?.params?.projectName || 'Projeto';
 
   const { data: projects = [] } = useProjects(workspace?.id);
-  const { data: transactions = [], isLoading } = useProjectTransactions(projectId);
+  const { data: rawTransactions = [], isLoading } = useProjectTransactions(projectId);
+  const { data: savingsGoals = [] } = useSavingsGoals(workspace?.id);
+
+  const transactions = rawTransactions.map(t => ({
+    ...t,
+    savings_goal_name: t.savings_goal_id
+      ? savingsGoals.find(g => g.id === t.savings_goal_id)?.name
+      : undefined,
+  }));
 
   const project = projects.find(p => p.id === projectId);
 
@@ -25,7 +33,8 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
 
   const stats = useMemo(() => {
     const total = transactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const debitTotal = transactions.filter(t => t.payment_method !== 'credit').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const savingsTotal = transactions.filter(t => t.from_savings).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const debitTotal = transactions.filter(t => t.payment_method !== 'credit' && !t.from_savings).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const creditTotal = transactions.filter(t => t.payment_method === 'credit').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const installmentCount = transactions.filter(t => t.installment_total && t.installment_total > 1).length;
 
@@ -48,7 +57,7 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount);
 
-    return { total, debitTotal, creditTotal, installmentCount, categories, memberBreakdown };
+    return { total, debitTotal, creditTotal, savingsTotal, installmentCount, categories, memberBreakdown };
   }, [transactions, members]);
 
   const budgetProgress = project?.budget ? (stats.total / Number(project.budget)) * 100 : null;
@@ -60,6 +69,7 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
     const isCredit = item.payment_method === 'credit';
     const isInstallment = item.installment_total && item.installment_total > 1;
     const isLastInstallment = isInstallment && item.installment_current === item.installment_total;
+    const isSavingsWithdrawal = !!item.from_savings;
 
     return (
       <View className="p-3 mb-2 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
@@ -82,12 +92,21 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
         <View className="flex-row justify-between items-center mt-2 pt-2 border-t border-gray-100 dark:border-slate-700">
           <View className="flex-row items-center gap-2">
             <Text className="text-[10px] text-gray-400 dark:text-slate-500">{formattedDate}</Text>
-            <View className={`flex-row items-center px-1.5 py-0.5 rounded ${isCredit ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-              <Ionicons name={isCredit ? 'card' : 'wallet'} size={10} color={isCredit ? '#f59e0b' : '#3b82f6'} style={{ marginRight: 2 }} />
-              <Text className={`text-[10px] font-semibold ${isCredit ? 'text-amber-500' : 'text-blue-500'}`}>
-                {isCredit ? 'Crédito' : 'Débito/Pix'}
-              </Text>
-            </View>
+            {isSavingsWithdrawal ? (
+              <View className="flex-row items-center px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20">
+                <Ionicons name="wallet-outline" size={10} color="#10b981" style={{ marginRight: 2 }} />
+                <Text className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Poupança{item.savings_goal_name ? ` · ${item.savings_goal_name}` : ''}
+                </Text>
+              </View>
+            ) : (
+              <View className={`flex-row items-center px-1.5 py-0.5 rounded ${isCredit ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                <Ionicons name={isCredit ? 'card' : 'wallet'} size={10} color={isCredit ? '#f59e0b' : '#3b82f6'} style={{ marginRight: 2 }} />
+                <Text className={`text-[10px] font-semibold ${isCredit ? 'text-amber-500' : 'text-blue-500'}`}>
+                  {isCredit ? 'Crédito' : 'Débito/Pix'}
+                </Text>
+              </View>
+            )}
           </View>
           <Text className="text-[10px] font-medium text-blue-500 dark:text-blue-400">{memberName}</Text>
         </View>
@@ -166,6 +185,17 @@ export const ProjectDetailScreen: React.FC<{ route?: any; onGoBack?: () => void 
                 <Text className="text-base font-bold text-gray-900 dark:text-slate-100">{formatCurrency(stats.creditTotal)}</Text>
               </View>
             </View>
+            {stats.savingsTotal > 0 && (
+              <View className="rounded-xl p-3 mb-3 bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name="wallet-outline" size={14} color="#10b981" />
+                    <Text className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Retiradas da poupança</Text>
+                  </View>
+                  <Text className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(stats.savingsTotal)}</Text>
+                </View>
+              </View>
+            )}
 
             {stats.installmentCount > 0 && (
               <View className="rounded-xl p-3 mb-3 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800">

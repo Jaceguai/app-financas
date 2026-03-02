@@ -46,8 +46,8 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
       await onResendEmail();
       setCountdown(60);
       setCanResend(false);
-    } catch (error) {
-      console.error('Erro ao reenviar email:', error);
+    } catch {
+      // Silently handle resend failure
     } finally {
       setResending(false);
     }
@@ -100,14 +100,14 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
               <ActivityIndicator color={isDark ? '#60a5fa' : '#3b82f6'} />
             ) : (
               <View className="flex-row items-center gap-2">
-                <Ionicons 
-                  name="refresh" 
-                  size={20} 
-                  color={canResend ? (isDark ? '#60a5fa' : '#3b82f6') : (isDark ? '#64748b' : '#9ca3af')} 
+                <Ionicons
+                  name="refresh"
+                  size={20}
+                  color={canResend ? (isDark ? '#60a5fa' : '#3b82f6') : (isDark ? '#64748b' : '#9ca3af')}
                 />
                 <Text className={`text-base font-semibold ${
-                  canResend 
-                    ? 'text-blue-500 dark:text-blue-400' 
+                  canResend
+                    ? 'text-blue-500 dark:text-blue-400'
                     : 'text-gray-400 dark:text-slate-500'
                 }`}>
                   {canResend ? 'Reenviar Email' : `Reenviar em ${countdown}s`}

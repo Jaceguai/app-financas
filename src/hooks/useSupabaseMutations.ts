@@ -5,6 +5,7 @@ import {
     deleteProject,
     deleteSavingsGoal,
     deleteTransaction,
+    deleteTransactionGroup,
     depositToGoal,
     insertFixedExpense,
     insertIncome,
@@ -13,6 +14,7 @@ import {
     insertTransaction,
     updateProject,
     upsertConfig,
+    withdrawFromSavings,
 } from '../services/api';
 
 export const useAddTransaction = () => {
@@ -29,6 +31,16 @@ export const useDeleteTransaction = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+};
+
+export const useDeleteTransactionGroup = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteTransactionGroup,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
@@ -91,6 +103,7 @@ export const useDepositToGoal = () => {
     mutationFn: ({ id, amount }: { id: string; amount: number }) => depositToGoal(id, amount),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['savings_goals'] });
+      queryClient.invalidateQueries({ queryKey: ['savings_deposits'] });
     },
   });
 };
@@ -144,6 +157,17 @@ export const useDeleteProject = () => {
     mutationFn: deleteProject,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+};
+
+export const useWithdrawFromSavings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: withdrawFromSavings,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['savings_goals'] });
     },
   });
 };

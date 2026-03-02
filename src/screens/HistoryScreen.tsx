@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
-import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MonthSelector, getCurrentMonth } from '../components/MonthSelector';
 import { CATEGORIES } from '../constants/categories';
 import { useWorkspace } from '../contexts/WorkspaceContext';
-import { useTransactions as useTransactionsQuery } from '../hooks/useSupabaseQuery';
+import { useDeleteTransaction, useDeleteTransactionGroup } from '../hooks/useSupabaseMutations';
+import { useSavingsGoals, useTransactions as useTransactionsQuery } from '../hooks/useSupabaseQuery';
 import { useTheme } from '../theme';
 import { Transaction } from '../types';
 
@@ -15,7 +16,17 @@ export const HistoryScreen: React.FC = () => {
   const queryClient = useQueryClient();
   const { workspace, members } = useWorkspace();
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
-  const { data: transactions = [], isLoading } = useTransactionsQuery(workspace?.id, selectedMonth);
+  const { data: rawTransactions = [] } = useTransactionsQuery(workspace?.id, selectedMonth);
+  const { data: savingsGoals = [] } = useSavingsGoals(workspace?.id);
+  const deleteTransaction = useDeleteTransaction();
+  const deleteTransactionGroup = useDeleteTransactionGroup();
+
+  const transactions = rawTransactions.map(t => ({
+    ...t,
+    savings_goal_name: t.savings_goal_id
+      ? savingsGoals.find(g => g.id === t.savings_goal_id)?.name
+      : undefined,
+  }));
 
   const [filterCategory, setFilterCategory] = useState<string>('Todas');
   const [filterUser, setFilterUser] = useState<string>('Todos');
@@ -55,6 +66,47 @@ export const HistoryScreen: React.FC = () => {
     setRefreshing(false);
   };
 
+  const handleDelete = (item: Transaction) => {
+    const isInstallment = item.installment_total && item.installment_total > 1;
+    const isSavings = !!item.from_savings;
+
+    const savingsNote = isSavings
+      ? '\n\nObs: o saldo da meta de poupança não será restaurado automaticamente.'
+      : '';
+
+    if (isInstallment) {
+      Alert.alert(
+        'Remover lançamento',
+        `"${item.description}" (${item.installment_current}/${item.installment_total}x)${savingsNote}`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Só esta parcela',
+            onPress: () => deleteTransaction.mutate(item.id),
+          },
+          {
+            text: 'Todas as parcelas',
+            style: 'destructive',
+            onPress: () => deleteTransactionGroup.mutate(item.installment_id!),
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Remover lançamento',
+        `Deseja remover "${item.description}"?${savingsNote}`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Remover',
+            style: 'destructive',
+            onPress: () => deleteTransaction.mutate(item.id),
+          },
+        ]
+      );
+    }
+  };
+
   const renderTransaction = ({ item }: { item: Transaction }) => {
     const date = new Date(item.transaction_date);
     const formattedDate = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -64,6 +116,7 @@ export const HistoryScreen: React.FC = () => {
     const isInstallment = item.installment_total && item.installment_total > 1;
     const isLastInstallment = isInstallment && item.installment_current === item.installment_total;
     const remaining = isInstallment ? (item.installment_total! - item.installment_current!) : 0;
+    const isSavingsWithdrawal = !!item.from_savings;
 
     return (
       <View className="rounded-xl p-4 mb-3 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
@@ -86,15 +139,33 @@ export const HistoryScreen: React.FC = () => {
         <View className="flex-row justify-between items-end mt-2 pt-2 border-t border-gray-100 dark:border-slate-700">
           <View className="gap-1.5">
             <Text className="text-xs text-gray-400 dark:text-slate-500">{formattedDate} às {formattedTime}</Text>
-            <View className={`flex-row items-center self-start px-2 py-0.5 rounded ${isCredit ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-              <Ionicons name={isCredit ? 'card' : 'wallet'} size={12} color={isCredit ? '#f59e0b' : '#3b82f6'} style={{marginRight: 4}} />
-              <Text className={`text-xs font-semibold ${isCredit ? 'text-amber-500 dark:text-amber-400' : 'text-primary-500 dark:text-primary-400'}`}>
-                {isCredit ? 'Crédito' : 'Débito/Pix'}
-              </Text>
-            </View>
+            {isSavingsWithdrawal ? (
+              <View className="flex-row items-center self-start px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20">
+                <Ionicons name="wallet-outline" size={12} color="#10b981" style={{marginRight: 4}} />
+                <Text className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  Retirada da poupança{item.savings_goal_name ? ` · ${item.savings_goal_name}` : ''}
+                </Text>
+              </View>
+            ) : (
+              <View className={`flex-row items-center self-start px-2 py-0.5 rounded ${isCredit ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                <Ionicons name={isCredit ? 'card' : 'wallet'} size={12} color={isCredit ? '#f59e0b' : '#3b82f6'} style={{marginRight: 4}} />
+                <Text className={`text-xs font-semibold ${isCredit ? 'text-amber-500 dark:text-amber-400' : 'text-primary-500 dark:text-primary-400'}`}>
+                  {isCredit ? 'Crédito' : 'Débito/Pix'}
+                </Text>
+              </View>
+            )}
           </View>
-          <View className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20">
-            <Text className="text-xs font-medium text-blue-500 dark:text-blue-400">{memberName}</Text>
+          <View className="flex-row items-center gap-2">
+            <View className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20">
+              <Text className="text-xs font-medium text-blue-500 dark:text-blue-400">{memberName}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleDelete(item)}
+              disabled={deleteTransaction.isPending || deleteTransactionGroup.isPending}
+              className="p-1"
+            >
+              <Ionicons name="trash-outline" size={16} color={isDark ? '#64748b' : '#9ca3af'} />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
