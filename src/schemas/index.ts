@@ -1,8 +1,42 @@
 import { z } from 'zod';
 
-/**
- * Schema para transação
- */
+// ========== Auth Schemas ==========
+
+export const loginSchema = z.object({
+  email: z.string().min(1, 'Email é obrigatório').email('Email inválido'),
+  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+});
+
+export type LoginFormData = z.infer<typeof loginSchema>;
+
+export const registerSchema = z.object({
+  displayName: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(50, 'Nome muito longo'),
+  email: z.string().min(1, 'Email é obrigatório').email('Email inválido'),
+  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+  confirmPassword: z.string().min(1, 'Confirme sua senha'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Senhas não coincidem',
+  path: ['confirmPassword'],
+});
+
+export type RegisterFormData = z.infer<typeof registerSchema>;
+
+// ========== Workspace Schemas ==========
+
+export const workspaceSchema = z.object({
+  name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(50, 'Nome muito longo'),
+});
+
+export type WorkspaceFormData = z.infer<typeof workspaceSchema>;
+
+export const joinWorkspaceSchema = z.object({
+  code: z.string().length(6, 'Código deve ter 6 caracteres').regex(/^[A-Z0-9]+$/, 'Código inválido'),
+});
+
+export type JoinWorkspaceFormData = z.infer<typeof joinWorkspaceSchema>;
+
+// ========== Transaction Schema ==========
+
 export const transactionSchema = z.object({
   value: z.string()
     .min(1, 'Valor é obrigatório')
@@ -15,13 +49,13 @@ export const transactionSchema = z.object({
     .max(100, 'Descrição muito longa'),
   category: z.string().min(1, 'Categoria é obrigatória'),
   paymentMethod: z.enum(['debit', 'credit']),
+  installments: z.number().min(1).max(48).optional(),
 });
 
 export type TransactionFormData = z.infer<typeof transactionSchema>;
 
-/**
- * Schema para gasto fixo
- */
+// ========== Fixed Expense Schema ==========
+
 export const fixedExpenseSchema = z.object({
   descricao: z.string()
     .min(1, 'Descrição é obrigatória')
@@ -32,15 +66,14 @@ export const fixedExpenseSchema = z.object({
       const num = parseFloat(val.replace(',', '.').trim());
       return !isNaN(num) && num > 0;
     }, 'Valor inválido'),
-  responsavel: z.enum(['A', 'B', 'Ambos']),
+  responsibleMemberId: z.string().optional(),
   paymentMethod: z.enum(['debit', 'credit']),
 });
 
 export type FixedExpenseFormData = z.infer<typeof fixedExpenseSchema>;
 
-/**
- * Schema para renda
- */
+// ========== Income Schema ==========
+
 export const rendaSchema = z.object({
   descricao: z.string()
     .min(1, 'Descrição é obrigatória')
@@ -51,14 +84,13 @@ export const rendaSchema = z.object({
       const num = parseFloat(val.replace(',', '.').trim());
       return !isNaN(num) && num > 0;
     }, 'Valor inválido'),
-  responsavel: z.enum(['A', 'B', 'Ambos']),
+  responsibleMemberId: z.string().optional(),
 });
 
 export type RendaFormData = z.infer<typeof rendaSchema>;
 
-/**
- * Schema para meta de poupança
- */
+// ========== Savings Goal Schema ==========
+
 export const metaSchema = z.object({
   nome: z.string()
     .min(1, 'Nome é obrigatório')
@@ -79,9 +111,8 @@ export const metaSchema = z.object({
 
 export type MetaFormData = z.infer<typeof metaSchema>;
 
-/**
- * Schema para depósito em meta
- */
+// ========== Deposit Schema ==========
+
 export const depositoMetaSchema = z.object({
   valor: z.string()
     .min(1, 'Valor é obrigatório')
@@ -93,9 +124,8 @@ export const depositoMetaSchema = z.object({
 
 export type DepositoMetaFormData = z.infer<typeof depositoMetaSchema>;
 
-/**
- * Schema para configuração de gastos variáveis
- */
+// ========== Config Schema ==========
+
 export const configSchema = z.object({
   extraGastosVariaveis: z.string()
     .min(1, 'Valor é obrigatório')

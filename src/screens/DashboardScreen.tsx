@@ -1,284 +1,273 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../theme';
-import { useFinanceStore } from '../store/useFinanceStore';
-import { useSyncDrive } from '../hooks/useSyncDrive';
+import { useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MonthSelector, getCurrentMonth } from '../components/MonthSelector';
 import { ProgressBar } from '../components/ProgressBar';
-import { formatCurrency, formatPercentage } from '../utils/formatters';
-
-const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+import { useWorkspace } from '../contexts/WorkspaceContext';
+import { useFixedExpenses, useIncomes, useSavingsGoals, useTransactions } from '../hooks/useSupabaseQuery';
+import { useFinanceStore } from '../store/useFinanceStore';
+import { useTheme } from '../theme';
+import { formatCurrency } from '../utils/formatters';
+import { getIconColor } from '../utils/iconColors';
 
 export default function DashboardScreen() {
-  const { theme } = useTheme();
-  const { 
-    rendasFixas = [], 
-    poupancas = [],
-    selectedMonth,
-    setSelectedMonth,
-    getTransactionsByMonth,
-    getRendaTotal,
-    hideValues,
-    setHideValues,
-    getGastosFixosDebit,
-    getGastosVariaveisDebit,
-    getInvoiceTotal,
-    getInvoiceFixed,
-    getInvoiceVariable
-  } = useFinanceStore();
-
+  const { isDark } = useTheme();
+  const queryClient = useQueryClient();
+  const { workspace, members } = useWorkspace();
+  const { hideValues } = useFinanceStore();
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [localHideValues, setLocalHideValues] = useState(hideValues);
 
-  const { refetch, isLoading } = useSyncDrive();
-  
-  const rendaTotal = getRendaTotal?.() || 0;
-  const gastosFixosDebit = getGastosFixosDebit();
-  const gastosMesDebit = getGastosVariaveisDebit();
-  const invoiceTotal = getInvoiceTotal();
-  const invoiceFixed = getInvoiceFixed();
-  const invoiceVariable = getInvoiceVariable();
+  const { data: transactions = [], isLoading: txLoading } = useTransactions(workspace?.id, selectedMonth);
+  const { data: fixedExpenses = [] } = useFixedExpenses(workspace?.id);
+  const { data: incomes = [] } = useIncomes(workspace?.id);
+  const { data: savingsGoals = [] } = useSavingsGoals(workspace?.id);
+
+  const rendaTotal = incomes.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const gastosFixosDebit = fixedExpenses
+    .filter(r => r.payment_method !== 'credit')
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const gastosMesDebit = transactions
+    .filter(t => t.payment_method !== 'credit')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+  const invoiceFixed = fixedExpenses
+    .filter(r => r.payment_method === 'credit')
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const invoiceVariable = transactions
+    .filter(t => t.payment_method === 'credit')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+  const invoiceTotal = invoiceFixed + invoiceVariable;
   const restante = rendaTotal - gastosFixosDebit - gastosMesDebit - invoiceTotal;
+  const patrimonioTotal = savingsGoals.reduce((sum, p) => sum + (Number(p.current_amount) || 0), 0);
 
-  const patrimonioTotal = (poupancas || []).reduce((sum, p) => sum + (Number(p.atual) || 0), 0);
-  const transacoesMes = getTransactionsByMonth();
-  const gastosUsuarioA = transacoesMes
-    .filter((t) => t.userName === 'Usuário A')
-    .reduce((sum, t) => sum + (Number(t.value) || 0), 0);
-  const gastosUsuarioB = transacoesMes
-    .filter((t) => t.userName === 'Usuário B')
-    .reduce((sum, t) => sum + (Number(t.value) || 0), 0);
+  const memberSpending = members.map(member => ({
+    ...member,
+    total: transactions
+      .filter(t => t.user_id === member.user_id)
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+  }));
 
-  const [mes, ano] = (selectedMonth || '01/2026').split('/');
-  const mesIndex = parseInt(mes, 10) - 1;
-  const mesNome = MESES[mesIndex] || 'Janeiro';
+  // Agrupar parcelas ativas no mês selecionado
+  const installmentItems = transactions
+    .filter(t => t.installment_id && t.installment_total && t.installment_total > 1)
+    .map(t => ({
+      installment_id: t.installment_id!,
+      description: t.description,
+      category: t.category,
+      amount_per_installment: Number(t.amount) || 0,
+      current: t.installment_current || 1,
+      total: t.installment_total || 1,
+      remaining: (t.installment_total || 1) - (t.installment_current || 1),
+      total_remaining_amount: ((t.installment_total || 1) - (t.installment_current || 1)) * (Number(t.amount) || 0),
+      isLast: t.installment_current === t.installment_total,
+      member_name: members.find(m => m.user_id === t.user_id)?.display_name || '',
+    }));
 
-  const navigateMonth = (direction: number) => {
-    let newMes = parseInt(mes, 10) + direction;
-    let newAno = parseInt(ano, 10);
-    if (newMes < 1) { newMes = 12; newAno--; }
-    if (newMes > 12) { newMes = 1; newAno++; }
-    setSelectedMonth(`${String(newMes).padStart(2, '0')}/${newAno}`);
+  const onRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['fixed_expenses'] });
+    await queryClient.invalidateQueries({ queryKey: ['incomes'] });
+    await queryClient.invalidateQueries({ queryKey: ['savings_goals'] });
   };
 
-  const toggleHideValues = () => {
-    setLocalHideValues(!localHideValues);
-  };
+  const memberColors = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-slate-900" edges={['left', 'right', 'bottom']}>
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        className="flex-1"
+        contentContainerClassName="p-4 pb-5"
+        refreshControl={<RefreshControl refreshing={txLoading} onRefresh={onRefresh} tintColor="#2196f3" colors={['#2196f3']} />}
       >
-        <View style={[styles.monthSelector, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <TouchableOpacity onPress={() => navigateMonth(-1)}>
-            <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Text style={[styles.monthText, { color: theme.colors.textPrimary }]}>{mesNome} {ano}</Text>
-            <TouchableOpacity onPress={toggleHideValues} style={{ padding: 4 }}>
-              <Ionicons 
-                name={localHideValues ? 'eye-off' : 'eye'} 
-                size={24} 
-                color={theme.colors.textSecondary} 
-              />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={() => navigateMonth(1)}>
-            <Ionicons name="chevron-forward" size={28} color={theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
+       <View
+       className='mb-4'>
+         <MonthSelector
+          selectedMonth={selectedMonth}
+          onChangeMonth={setSelectedMonth}
+          compact
+          hideValues={localHideValues}
+          onToggleHide={() => setLocalHideValues(!localHideValues)}
+        />
+       </View>
 
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Balanço Mensal</Text>
-        
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Entradas (Renda):</Text>
-            <Text style={[styles.value, { color: theme.colors.textPrimary }]}>{formatCurrency(rendaTotal, localHideValues)}</Text>
+        {/* Monthly Balance */}
+        <View className="rounded-xl p-4 mb-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <Text className="text-lg font-bold mb-3 text-gray-900 dark:text-slate-100">Balanço Mensal</Text>
+          <View className="flex-row justify-between py-2 items-center">
+            <Text className="text-base text-gray-500 dark:text-slate-400">Entradas (Renda):</Text>
+            <Text className="text-base text-gray-900 dark:text-slate-100">{formatCurrency(rendaTotal, localHideValues)}</Text>
           </View>
-          
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Saídas (Débito):</Text>
-            <Text style={styles.valueRed}>- {formatCurrency(gastosFixosDebit + gastosMesDebit, localHideValues)}</Text>
+          <View className="flex-row justify-between py-2 items-center">
+            <Text className="text-base text-gray-500 dark:text-slate-400">Saídas (Débito):</Text>
+            <Text className="text-base text-red-500">- {formatCurrency(gastosFixosDebit + gastosMesDebit, localHideValues)}</Text>
           </View>
-
-          <View style={styles.row}>
-            <Text style={styles.labelOrange}>Comprometido (Fatura):</Text>
-            <Text style={styles.valueOrange}>- {formatCurrency(invoiceTotal, localHideValues)}</Text>
+          <View className="flex-row justify-between py-2 items-center">
+            <Text className="text-base text-amber-500">Comprometido (Fatura):</Text>
+            <Text className="text-base text-amber-500">- {formatCurrency(invoiceTotal, localHideValues)}</Text>
           </View>
-
-          <View style={[styles.row, styles.rowTotal, { borderTopColor: theme.colors.border }]}>
-            <Text style={[styles.labelBold, { color: theme.colors.textPrimary }]}>Livre para Gastar:</Text>
-            <Text style={[styles.valueBold, restante >= 0 ? styles.valueGreen : styles.valueRed]}>
+          <View className="flex-row justify-between pt-3 mt-2 items-center border-t border-gray-200 dark:border-slate-700">
+            <Text className="text-base font-semibold text-gray-900 dark:text-slate-100">Livre para Gastar:</Text>
+            <Text className={`text-lg font-bold ${restante >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
               {formatCurrency(restante, localHideValues)}
             </Text>
           </View>
         </View>
 
-        <View style={[styles.card, styles.invoiceCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <View style={styles.invoiceHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="card" size={24} color={theme.colors.accent} />
-              <Text style={[styles.cardTitleNoMargin, { color: theme.colors.textPrimary }]}>Detalhes da Fatura</Text>
+        {/* Invoice Details */}
+        <View className="rounded-xl p-4 mb-4 border border-l-4 border-l-amber-500 shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <View className="flex-row justify-between items-center mb-3">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="card" size={24} color={getIconColor('warning', isDark)} />
+              <Text className="text-lg font-bold text-gray-900 dark:text-slate-100">Detalhes da Fatura</Text>
             </View>
-            <Text style={[styles.invoiceTotalValue, { color: theme.colors.accent }]}>{formatCurrency(invoiceTotal, localHideValues)}</Text>
+            <Text className="text-xl font-bold text-amber-500 dark:text-amber-400">{formatCurrency(invoiceTotal, localHideValues)}</Text>
           </View>
-
-          <View style={[styles.separator, { backgroundColor: theme.colors.border }]} />
-
-          <View style={styles.rowSmall}>
-            <Text style={[styles.labelSmall, { color: theme.colors.textSecondary }]}>Fixos (Assinaturas):</Text>
-            <Text style={[styles.valueSmall, { color: theme.colors.textPrimary }]}>{formatCurrency(invoiceFixed, localHideValues)}</Text>
+          <View className="h-px my-2 bg-gray-200 dark:bg-slate-700" />
+          <View className="flex-row justify-between py-1">
+            <Text className="text-sm text-gray-500 dark:text-slate-400">Fixos (Assinaturas):</Text>
+            <Text className="text-sm font-semibold text-gray-900 dark:text-slate-100">{formatCurrency(invoiceFixed, localHideValues)}</Text>
           </View>
-
-          <View style={styles.rowSmall}>
-            <Text style={[styles.labelSmall, { color: theme.colors.textSecondary }]}>Variáveis (Compras):</Text>
-            <Text style={[styles.valueSmall, { color: theme.colors.textPrimary }]}>{formatCurrency(invoiceVariable, localHideValues)}</Text>
+          <View className="flex-row justify-between py-1">
+            <Text className="text-sm text-gray-500 dark:text-slate-400">Variáveis (Compras):</Text>
+            <Text className="text-sm font-semibold text-gray-900 dark:text-slate-100">{formatCurrency(invoiceVariable, localHideValues)}</Text>
           </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Patrimônio Total</Text>
-          <Text style={[styles.patrimonio, { color: theme.colors.secondary }]}>{formatCurrency(patrimonioTotal, localHideValues)}</Text>
+        {/* Installments Tracking */}
+        {installmentItems.length > 0 && (
+          <View className="rounded-xl p-4 mb-4 border border-l-4 border-l-purple-500 shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+            <View className="flex-row items-center gap-2 mb-3">
+              <Ionicons name="layers" size={22} color={isDark ? '#a78bfa' : '#8b5cf6'} />
+              <Text className="text-lg font-bold text-gray-900 dark:text-slate-100">Compras Parceladas</Text>
+              <View className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                <Text className="text-xs font-bold text-purple-600 dark:text-purple-400">{installmentItems.length}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row justify-between items-center mb-3 px-1">
+              <Text className="text-xs text-gray-400 dark:text-slate-500">Total parcelas no mês:</Text>
+              <Text className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                {formatCurrency(installmentItems.reduce((sum, i) => sum + i.amount_per_installment, 0), localHideValues)}
+              </Text>
+            </View>
+
+            {installmentItems.map((item, index) => {
+              const progress = item.current / item.total;
+              return (
+                <View
+                  key={`${item.installment_id}-${index}`}
+                  className={`p-3 rounded-xl mb-2 ${item.isLast ? 'bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-slate-700/50'}`}
+                >
+                  <View className="flex-row justify-between items-start mb-1">
+                    <View className="flex-1">
+                      <Text className="text-sm font-semibold text-gray-900 dark:text-slate-100">{item.description}</Text>
+                      <Text className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{item.category} · {item.member_name}</Text>
+                    </View>
+                    <Text className="text-sm font-bold text-gray-900 dark:text-slate-100">
+                      {formatCurrency(item.amount_per_installment, localHideValues)}/mês
+                    </Text>
+                  </View>
+
+                  {/* Progress bar */}
+                  <View className="h-2 rounded-full bg-gray-200 dark:bg-slate-600 mt-2 mb-1.5 overflow-hidden">
+                    <View
+                      className={`h-full rounded-full ${item.isLast ? 'bg-emerald-500' : 'bg-purple-500'}`}
+                      style={{ width: `${Math.min(progress * 100, 100)}%` }}
+                    />
+                  </View>
+
+                  <View className="flex-row justify-between items-center">
+                    <Text className={`text-xs font-bold ${item.isLast ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'}`}>
+                      {item.isLast ? '✓ Última parcela!' : `${item.current}/${item.total} · faltam ${item.remaining}`}
+                    </Text>
+                    {!item.isLast && (
+                      <Text className="text-xs text-gray-400 dark:text-slate-500">
+                        Restante: {formatCurrency(item.total_remaining_amount, localHideValues)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Total Patrimony */}
+        <View className="rounded-xl p-4 mb-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <Text className="text-lg font-bold mb-3 text-gray-900 dark:text-slate-100">Patrimônio Total</Text>
+          <Text className="text-3xl font-bold text-center text-emerald-500 dark:text-emerald-400">{formatCurrency(patrimonioTotal, localHideValues)}</Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Metas de Poupança</Text>
-          {(poupancas || []).length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.colors.textTertiary }]}>Nenhuma meta cadastrada</Text>
+        {/* Savings Goals */}
+        <View className="rounded-xl p-4 mb-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <Text className="text-lg font-bold mb-3 text-gray-900 dark:text-slate-100">Metas de Poupança</Text>
+          {savingsGoals.length === 0 ? (
+            <Text className="text-center py-4 text-gray-400 dark:text-slate-500">Nenhuma meta cadastrada</Text>
           ) : (
-            (poupancas || []).map((meta) => (
-              <View key={meta.id} style={styles.metaItem}>
-                <View style={styles.metaHeader}>
-                  <Text style={[styles.metaNome, { color: theme.colors.textPrimary }]}>{meta.nome}</Text>
-                  <Text style={[styles.metaValores, { color: theme.colors.textSecondary }]}>
-                    {formatCurrency(Number(meta.atual) || 0, localHideValues)} / {formatCurrency(Number(meta.objetivo) || 0, localHideValues)}
+            savingsGoals.map((meta) => (
+              <View key={meta.id} className="mb-4">
+                <View className="flex-row justify-between mb-2">
+                  <Text className="text-sm font-semibold text-gray-900 dark:text-slate-100">{meta.name}</Text>
+                  <Text className="text-sm text-gray-500 dark:text-slate-400">
+                    {formatCurrency(Number(meta.current_amount) || 0, localHideValues)} / {formatCurrency(Number(meta.target_amount) || 0, localHideValues)}
                   </Text>
                 </View>
                 <ProgressBar
-                  progress={(Number(meta.objetivo) || 0) > 0 ? (Number(meta.atual) || 0) / (Number(meta.objetivo) || 1) : 0}
-                  color={theme.colors.secondary}
+                  progress={(Number(meta.target_amount) || 0) > 0 ? (Number(meta.current_amount) || 0) / (Number(meta.target_amount) || 1) : 0}
+                  showLabels={false}
                 />
               </View>
             ))
           )}
         </View>
 
-        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Consumo Total</Text>
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Usuário A:</Text>
-            <Text style={[styles.value, { color: theme.colors.textPrimary }]}>R$ {gastosUsuarioA.toFixed(2)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Usuário B:</Text>
-            <Text style={[styles.value, { color: theme.colors.textPrimary }]}>R$ {gastosUsuarioB.toFixed(2)}</Text>
-          </View>
-          <View style={styles.barContainer}>
-            <View style={[styles.barSegmentA, { flex: gastosUsuarioA || 1, backgroundColor: theme.colors.primary }]} />
-            <View style={[styles.barSegmentB, { flex: gastosUsuarioB || 1, backgroundColor: theme.colors.accent }]} />
-          </View>
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.colors.primary }]} />
-              <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Usuário A</Text>
+        {/* Member Spending */}
+        <View className="rounded-xl p-4 mb-4 border shadow-sm bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+          <Text className="text-lg font-bold mb-3 text-gray-900 dark:text-slate-100">Consumo Total</Text>
+          {memberSpending.map((member) => (
+            <View key={member.id} className="flex-row justify-between py-2 items-center">
+              <Text className="text-base text-gray-500 dark:text-slate-400">{member.display_name}:</Text>
+              <Text className="text-base text-gray-900 dark:text-slate-100">{formatCurrency(member.total, localHideValues)}</Text>
             </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.colors.accent }]} />
-              <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Usuário B</Text>
-            </View>
-          </View>
+          ))}
+          {memberSpending.length > 0 && (
+            <>
+              <View className="flex-row h-6 rounded-full overflow-hidden mt-3">
+                {memberSpending.map((member, index) => (
+                  <View
+                    key={member.id}
+                    style={{
+                      flex: member.total || 1,
+                      backgroundColor: memberColors[index % memberColors.length],
+                      borderTopLeftRadius: index === 0 ? 12 : 0,
+                      borderBottomLeftRadius: index === 0 ? 12 : 0,
+                      borderTopRightRadius: index === memberSpending.length - 1 ? 12 : 0,
+                      borderBottomRightRadius: index === memberSpending.length - 1 ? 12 : 0,
+                    }}
+                  />
+                ))}
+              </View>
+              <View className="flex-row justify-center gap-6 mt-3 flex-wrap">
+                {memberSpending.map((member, index) => (
+                  <View key={member.id} className="flex-row items-center gap-1.5">
+                    <View className="w-3 h-3 rounded-full" style={{ backgroundColor: memberColors[index % memberColors.length] }} />
+                    <Text className="text-xs text-gray-500 dark:text-slate-400">{member.display_name}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
         </View>
 
-        <View style={{ height: 20 }} />
+        <View className="h-5" />
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 20 },
-  monthSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-  },
-  monthText: { fontSize: 18, fontWeight: '700' },
-  card: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  invoiceCard: {
-    borderLeftWidth: 4,
-  },
-  invoiceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  invoiceTotalValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  separator: {
-    height: 1,
-    marginVertical: 8,
-  },
-  rowSmall: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  labelSmall: {
-    fontSize: 14,
-  },
-  valueSmall: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
-  cardTitleNoMargin: { fontSize: 18, fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, alignItems: 'center' },
-  rowTotal: { borderTopWidth: 1, marginTop: 8, paddingTop: 12 },
-  
-  label: { fontSize: 16 },
-  labelOrange: { fontSize: 16, color: '#f59e0b' },
-  labelBold: { fontSize: 16, fontWeight: '600' },
-  
-  value: { fontSize: 16 },
-  valueBold: { fontSize: 18, fontWeight: '700' },
-  valueRed: { fontSize: 16, color: '#ef4444' },
-  valueOrange: { fontSize: 16, color: '#f59e0b' },
-  valueGreen: { color: '#10b981' },
-  
-  patrimonio: { fontSize: 28, fontWeight: '700', textAlign: 'center' },
-  emptyText: { textAlign: 'center', paddingVertical: 16 },
-  metaItem: { marginBottom: 16 },
-  metaHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  metaNome: { fontSize: 14, fontWeight: '600' },
-  metaValores: { fontSize: 14 },
-  barContainer: { flexDirection: 'row', height: 24, borderRadius: 12, overflow: 'hidden', marginTop: 12 },
-  barSegmentA: {},
-  barSegmentB: {},
-  legendRow: { flexDirection: 'row', justifyContent: 'center', gap: 24, marginTop: 12 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 12, height: 12, borderRadius: 6 },
-  legendText: { fontSize: 12 },
-});

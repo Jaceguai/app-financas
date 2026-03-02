@@ -1,100 +1,63 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../theme';
+import { Text, View } from 'react-native';
 
 interface Props {
-  // Support both interfaces for flexibility
   current?: number;
   total?: number;
-  progress?: number; // 0-1 range
+  progress?: number;
   color?: string;
   showLabels?: boolean;
 }
 
-export const ProgressBar: React.FC<Props> = ({ 
-  current, 
-  total, 
+export const ProgressBar: React.FC<Props> = ({
+  current,
+  total,
   progress,
   color,
-  showLabels = true 
+  showLabels = true,
 }) => {
-  const { theme } = useTheme();
-
-  // Calculate percentage based on which props are provided
   let percentageCalc: number;
   let safeCurrent: number;
   let safeTotal: number;
-  
+
   if (progress !== undefined) {
-    // Using progress prop (0-1 range)
     percentageCalc = progress * 100;
     safeCurrent = 0;
     safeTotal = 0;
   } else {
-    // Using current/total props
     safeCurrent = Number(current) || 0;
     safeTotal = Number(total) || 0;
     percentageCalc = safeTotal > 0 ? (safeCurrent / safeTotal) * 100 : 0;
   }
-  
+
   const visualPercentage = Math.min(percentageCalc, 100);
   const isOverBudget = percentageCalc > 100;
-  
-  // Determine fill color
-  const fillColor = color || (isOverBudget ? theme.colors.error : theme.colors.secondary);
 
   return (
-    <View style={styles.container}>
+    <View className="w-full">
       {showLabels && current !== undefined && total !== undefined && (
-        <View style={styles.labelsRow}>
-          <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+        <View className="flex-row justify-between mb-2">
+          <Text className="text-sm text-gray-500 dark:text-slate-400">
             R$ {safeCurrent.toFixed(2)} / R$ {safeTotal.toFixed(2)}
           </Text>
-          <Text style={[
-            styles.percentage, 
-            { color: isOverBudget ? theme.colors.error : theme.colors.success }
-          ]}>
+          <Text className={`text-sm font-semibold ${isOverBudget ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
             {percentageCalc.toFixed(1)}%
           </Text>
         </View>
       )}
-      
-      <View style={[styles.progressBar, { backgroundColor: theme.colors.borderLight }]}>
-        <View 
-          style={[
-            styles.progressFill, 
-            { 
-              flex: visualPercentage / 100 || 0,
-              backgroundColor: fillColor
-            }
-          ]} 
+
+      <View className="h-3 rounded-full overflow-hidden flex-row w-full bg-gray-100 dark:bg-slate-600">
+        <View
+          className={`h-3 rounded-full ${isOverBudget ? 'bg-red-500 dark:bg-red-400' : 'bg-emerald-500 dark:bg-emerald-400'}`}
+          style={{ flex: visualPercentage / 100 || 0 }}
         />
       </View>
-      
+
       {isOverBudget && showLabels && (
-        <Text style={[styles.warningText, { color: theme.colors.error }]}>
+        <Text className="text-xs mt-1 font-bold text-red-500 dark:text-red-400">
           Orçamento excedido!
         </Text>
       )}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { width: '100%' },
-  labelsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  label: { fontSize: 14 },
-  percentage: { fontSize: 14, fontWeight: '600' },
-  progressBar: { 
-    height: 12, 
-    borderRadius: 999, 
-    overflow: 'hidden', 
-    flexDirection: 'row',
-    width: '100%'
-  },
-  progressFill: { 
-    height: 12, 
-    borderRadius: 999,
-  },
-  warningText: { fontSize: 12, marginTop: 4, fontWeight: 'bold' },
-});

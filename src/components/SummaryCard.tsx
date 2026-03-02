@@ -1,118 +1,67 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../theme';
-import { useFinanceStore } from '../store/useFinanceStore';
+import { Text, View } from 'react-native';
+import { useWorkspace } from '../contexts/WorkspaceContext';
+import { useTransactions as useTransactionsQuery, useWorkspaceConfig } from '../hooks/useSupabaseQuery';
 
-export const SummaryCard: React.FC = () => {
-  const { theme } = useTheme();
-  const { 
-    extraGastosVariaveis = 0, 
-    getTransactionsByMonth 
-  } = useFinanceStore();
+interface SummaryCardProps {
+  month: string;
+}
 
-  const transacoesMes = getTransactionsByMonth?.() || [];
-  
-  const transacoesLazer = transacoesMes.filter(t => 
+export const SummaryCard: React.FC<SummaryCardProps> = ({ month }) => {
+  const { workspace } = useWorkspace();
+
+  const { data: transactions = [] } = useTransactionsQuery(workspace?.id, month);
+  const { data: config = [] } = useWorkspaceConfig(workspace?.id);
+
+  const extraConfig = config.find(c => c.key === 'extraGastosVariaveis');
+  const limite = extraConfig ? Number(extraConfig.value) || 0 : 1000;
+
+  const transacoesLazer = transactions.filter(t =>
     t.category && t.category.trim().toLowerCase() === 'lazer'
   );
 
-  const totalSpent = transacoesLazer.reduce((sum, t) => sum + (Number(t.value) || 0), 0);
-  
-  const limite = Number(extraGastosVariaveis) || 0;
-  
+  const totalSpent = transacoesLazer.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const percentage = limite > 0 ? Math.min((totalSpent / limite) * 100, 100) : 0;
   const isOverBudget = totalSpent > limite;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <Text style={[styles.title, { color: theme.colors.textSecondary }]}>Orçamento de Lazer</Text>
-      
-      <View style={styles.row}>
+    <View className="rounded-xl p-4 mx-4 mt-4 border border-gray-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800">
+      <Text className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-300">
+        Orçamento de Lazer
+      </Text>
+
+      <View className="flex-row justify-between mb-3">
         <View>
-          <Text style={[styles.label, { color: theme.colors.textTertiary }]}>Gasto em Lazer</Text>
-          <Text style={[
-            styles.value, 
-            { color: isOverBudget ? theme.colors.error : theme.colors.primary }
-          ]}>
+          <Text className="text-sm text-gray-500 dark:text-gray-400">
+            Gasto em Lazer
+          </Text>
+          <Text className={`text-2xl font-bold ${isOverBudget ? 'text-red-500 dark:text-red-400' : 'text-primary-500 dark:text-primary-400'}`}>
             R$ {totalSpent.toFixed(2)}
           </Text>
-          <Text style={[styles.subLabel, { color: theme.colors.textTertiary }]}>
-             (Débito + Crédito)
+          <Text className="text-xs mt-0.5 text-gray-500 dark:text-gray-400">
+            (Débito + Crédito)
           </Text>
         </View>
-        
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={[styles.label, { color: theme.colors.textTertiary }]}>Teto Definido</Text>
-          <Text style={[styles.value, { color: theme.colors.textPrimary }]}>R$ {limite.toFixed(2)}</Text>
+        <View className="items-end">
+          <Text className="text-sm text-gray-500 dark:text-gray-400">
+            Teto Definido
+          </Text>
+          <Text className="text-2xl font-bold text-gray-900 dark:text-white">
+            R$ {limite.toFixed(2)}
+          </Text>
         </View>
       </View>
 
-      <View style={[styles.progressBar, { backgroundColor: theme.colors.borderLight }]}>
-        <View 
-          style={[
-            styles.progressFill, 
-            { 
-              flex: percentage / 100,
-              backgroundColor: isOverBudget ? theme.colors.error : theme.colors.primary
-            }
-          ]} 
+      <View className="h-3 rounded-full overflow-hidden flex-row bg-gray-200 dark:bg-slate-600">
+        <View
+          className={`h-3 rounded-full ${isOverBudget ? 'bg-red-500 dark:bg-red-400' : 'bg-primary-500 dark:bg-primary-400'}`}
+          style={{ flex: percentage / 100 }}
         />
       </View>
-      
-      <Text style={[styles.percentageText, { color: theme.colors.textTertiary }]}>
+
+      <Text className="text-xs mt-2 text-center text-gray-500 dark:text-gray-400">
         {percentage.toFixed(1)}% do teto utilizado
       </Text>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { 
-    borderRadius: 12, 
-    padding: 16, 
-    marginHorizontal: 16, 
-    marginTop: 16,
-    borderWidth: 1,
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 4, 
-    elevation: 3 
-  },
-  title: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    marginBottom: 8 
-  },
-  row: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 12 
-  },
-  label: { 
-    fontSize: 14 
-  },
-  subLabel: {
-    fontSize: 12,
-    marginTop: 2
-  },
-  value: { 
-    fontSize: 24, 
-    fontWeight: 'bold' 
-  },
-  progressBar: { 
-    height: 12, 
-    borderRadius: 999, 
-    overflow: 'hidden', 
-    flexDirection: 'row' 
-  },
-  progressFill: { 
-    height: 12, 
-    borderRadius: 999 
-  },
-  percentageText: { 
-    fontSize: 12, 
-    marginTop: 8, 
-    textAlign: 'center' 
-  },
-});

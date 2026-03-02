@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, View } from 'react-native';
 
 interface Props {
   userName: string;
@@ -9,22 +9,13 @@ interface Props {
 
 export const UserExpenseCard: React.FC<Props> = ({ userName, totalSpent, color }) => {
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={[styles.colorDot, { backgroundColor: color }]} />
-        <Text style={styles.userName}>{userName}</Text>
+    <View className="bg-white dark:bg-slate-800 rounded-xl p-4 flex-1 mx-1 shadow-md">
+      <View className="flex-row items-center mb-2">
+        <View className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: color }} />
+        <Text className="text-gray-600 dark:text-gray-400 text-sm font-medium">{userName}</Text>
       </View>
-      <Text style={styles.value}>R$ {totalSpent.toFixed(2)}</Text>
-      <Text style={styles.label}>Total gasto</Text>
+      <Text className="text-2xl font-bold text-gray-900 dark:text-white">R$ {totalSpent.toFixed(2)}</Text>
+      <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total gasto</Text>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { backgroundColor: '#fff', borderRadius: 12, padding: 16, flex: 1, marginHorizontal: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  colorDot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
-  userName: { color: '#757575', fontSize: 14, fontWeight: '500' },
-  value: { fontSize: 24, fontWeight: 'bold', color: '#212121' },
-  label: { fontSize: 12, color: '#9e9e9e', marginTop: 4 },
-});

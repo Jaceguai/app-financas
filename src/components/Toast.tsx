@@ -1,7 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../theme';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Text } from 'react-native';
 
 interface ToastProps {
   message: string;
@@ -12,15 +11,14 @@ interface ToastProps {
   position?: 'top' | 'bottom';
 }
 
-export const Toast: React.FC<ToastProps> = ({ 
-  message, 
-  type = 'info', 
-  visible, 
-  onHide, 
+export const Toast: React.FC<ToastProps> = ({
+  message,
+  type = 'info',
+  visible,
+  onHide,
   duration = 3000,
   position = 'top'
 }) => {
-  const { theme } = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(position === 'top' ? -20 : 20)).current;
 
@@ -34,10 +32,10 @@ export const Toast: React.FC<ToastProps> = ({
       const timer = setTimeout(() => {
         Animated.parallel([
           Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-          Animated.timing(translateY, { 
-            toValue: position === 'top' ? -20 : 20, 
-            duration: 200, 
-            useNativeDriver: true 
+          Animated.timing(translateY, {
+            toValue: position === 'top' ? -20 : 20,
+            duration: 200,
+            useNativeDriver: true
           }),
         ]).start(() => onHide());
       }, duration);
@@ -48,62 +46,46 @@ export const Toast: React.FC<ToastProps> = ({
 
   if (!visible) return null;
 
-  const getToastConfig = () => {
+  const getToastIcon = () => {
     switch (type) {
       case 'success':
-        return { backgroundColor: '#10b981', icon: 'checkmark-circle' as const };
+        return 'checkmark-circle' as const;
       case 'error':
-        return { backgroundColor: '#ef4444', icon: 'close-circle' as const };
+        return 'close-circle' as const;
       case 'warning':
-        return { backgroundColor: '#f59e0b', icon: 'warning' as const };
+        return 'warning' as const;
       default:
-        return { backgroundColor: '#3b82f6', icon: 'information-circle' as const };
+        return 'information-circle' as const;
     }
   };
 
-  const { backgroundColor, icon } = getToastConfig();
+  const getToastColorClass = () => {
+    switch (type) {
+      case 'success':
+        return 'bg-emerald-500';
+      case 'error':
+        return 'bg-red-500';
+      case 'warning':
+        return 'bg-amber-500';
+      default:
+        return 'bg-blue-500';
+    }
+  };
+
+  const icon = getToastIcon();
+  const colorClass = getToastColorClass();
 
   return (
-    <Animated.View 
-      style={[
-        styles.container, 
-        { 
-          backgroundColor,
-          opacity,
-          transform: [{ translateY }],
-          [position]: 50,
-        }
-      ]}
+    <Animated.View
+      className={`absolute left-4 right-4 p-4 rounded-xl z-50 flex-row items-center shadow-lg ${colorClass}`}
+      style={{
+        opacity,
+        transform: [{ translateY }],
+        [position]: 50,
+      }}
     >
-      <Ionicons name={icon} size={20} color="#fff" style={styles.icon} />
-      <Text style={styles.message}>{message}</Text>
+      <Ionicons name={icon} size={20} color="#fff" className="mr-3" />
+      <Text className="text-white text-sm font-semibold flex-1">{message}</Text>
     </Animated.View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    padding: 16,
-    borderRadius: 12,
-    zIndex: 9999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  icon: {
-    marginRight: 12,
-  },
-  message: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-});

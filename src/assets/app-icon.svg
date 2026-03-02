@@ -1,0 +1,56 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="coinGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bgGradient)"/>
+
+  <!-- Dog face - main circle -->
+  <circle cx="512" cy="480" r="280" fill="#ffffff"/>
+
+  <!-- Dog ears -->
+  <ellipse cx="300" cy="320" rx="100" ry="140" fill="#ffffff" transform="rotate(-20 300 320)"/>
+  <ellipse cx="724" cy="320" rx="100" ry="140" fill="#ffffff" transform="rotate(20 724 320)"/>
+
+  <!-- Inner ears -->
+  <ellipse cx="310" cy="330" rx="50" ry="80" fill="#fecaca" transform="rotate(-20 310 330)"/>
+  <ellipse cx="714" cy="330" rx="50" ry="80" fill="#fecaca" transform="rotate(20 714 330)"/>
+
+  <!-- Eyes -->
+  <circle cx="400" cy="440" r="45" fill="#1e293b"/>
+  <circle cx="624" cy="440" r="45" fill="#1e293b"/>
+
+  <!-- Eye shine -->
+  <circle cx="415" cy="425" r="15" fill="#ffffff"/>
+  <circle cx="639" cy="425" r="15" fill="#ffffff"/>
+
+  <!-- Nose -->
+  <ellipse cx="512" cy="540" rx="50" ry="40" fill="#1e293b"/>
+  <ellipse cx="512" cy="530" rx="20" ry="10" fill="#475569"/>
+
+  <!-- Mouth -->
+  <path d="M 462 580 Q 512 640 562 580" stroke="#1e293b" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+  <!-- Tongue -->
+  <ellipse cx="512" cy="620" rx="30" ry="45" fill="#f87171"/>
+
+  <!-- Coin on head -->
+  <circle cx="512" cy="250" r="90" fill="url(#coinGradient)" stroke="#fcd34d" stroke-width="8"/>
+
+  <!-- Dollar sign on coin -->
+  <text x="512" y="275" font-family="Arial, sans-serif" font-size="100" font-weight="bold" fill="#ffffff" text-anchor="middle">$</text>
+
+  <!-- Sparkles around coin -->
+  <circle cx="620" cy="180" r="12" fill="#fcd34d"/>
+  <circle cx="400" cy="200" r="8" fill="#fcd34d"/>
+  <circle cx="640" cy="280" r="10" fill="#fcd34d"/>
+</svg>

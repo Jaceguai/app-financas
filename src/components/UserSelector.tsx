@@ -1,51 +1,41 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '../theme';
-import { useFinanceStore } from '../store/useFinanceStore';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
+import { useWorkspace } from '../contexts/WorkspaceContext';
 
-export const UserSelector: React.FC = () => {
-  const { theme } = useTheme();
-  const { currentUser, setCurrentUser } = useFinanceStore();
+interface Props {
+  selectedUserId?: string;
+  onSelectUser?: (userId: string) => void;
+}
+
+export const UserSelector: React.FC<Props> = ({ selectedUserId, onSelectUser }) => {
+  const { user } = useAuth();
+  const { members } = useWorkspace();
+
+  const activeUserId = selectedUserId || user?.id;
+
+  if (members.length === 0) return null;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surfaceSecondary }]}>
-      {(['Usuário A', 'Usuário B'] as const).map((user) => (
+    <View className="flex-row rounded-lg p-1 mx-4 mt-4 bg-gray-100 dark:bg-slate-700">
+      {members.map((member) => (
         <TouchableOpacity
-          key={user}
-          onPress={() => setCurrentUser(user)}
-          style={[
-            styles.button, 
-            currentUser === user && { backgroundColor: theme.colors.surface }
-          ]}
+          key={member.id}
+          onPress={() => onSelectUser?.(member.user_id)}
+          className={`flex-1 py-3 rounded-md ${activeUserId === member.user_id ? 'bg-white dark:bg-slate-800' : ''}`}
         >
-          <Text style={[
-            styles.buttonText, 
-            { color: theme.colors.textSecondary },
-            currentUser === user && { color: theme.colors.primary, fontWeight: '700' }
-          ]}>
-            {user}
+          <Text
+            className={`text-center font-semibold ${
+              activeUserId === member.user_id
+                ? 'text-blue-500 dark:text-blue-400 font-bold'
+                : 'text-gray-500 dark:text-slate-400'
+            }`}
+          >
+            {member.display_name}
+            {member.user_id === user?.id ? ' (eu)' : ''}
           </Text>
         </TouchableOpacity>
       ))}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { 
-    flexDirection: 'row', 
-    borderRadius: 8, 
-    padding: 4, 
-    marginHorizontal: 16, 
-    marginTop: 16 
-  },
-  button: { 
-    flex: 1, 
-    paddingVertical: 12, 
-    borderRadius: 6 
-  },
-  buttonText: { 
-    textAlign: 'center', 
-    fontWeight: '600' 
-  },
-});
